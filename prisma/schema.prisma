@@ -1,0 +1,625 @@
+// CobraLearn InnoTechCore Showcase + Admin CMS
+// DATABASE ARCHITECTURE v1 — FROZEN IMPLEMENTATION
+// Authoritative Prisma Schema v1
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// 1. ENUMS (8 Approved Enums)
+// ============================================================
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  OTHER
+}
+
+enum MediaCategory {
+  ADVERTISEMENTS
+  WEBSITES
+  AWARDS
+  PROJECTS
+  GENERAL
+}
+
+enum NavItemType {
+  INTERNAL
+  EXTERNAL
+  BUTTON
+}
+
+enum NavItemStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum HighlightAccent {
+  EMERALD
+  CYAN
+  AMBER
+}
+
+enum ContactMessageStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+}
+
+// ============================================================
+// 2. IDENTITY & GOVERNANCE MODELS
+// ============================================================
+
+model AdminProfile {
+  id          String    @id // Supabase Auth user ID (UUID)
+  email       String    @unique
+  fullName    String
+  designation String?
+  avatarUrl   String?
+  role        AdminRole @default(EDITOR)
+  phone       String?
+  bio         String?
+  preferences Json?
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relationships
+  uploadedMedia MediaAsset[]
+  auditLogs     AdminAuditLog[]
+  sentReplies   ContactMessageReply[]
+  notifications AdminNotification[]
+  loginHistory  AdminLoginHistory[]
+}
+
+model AdminLoginHistory {
+  id         String        @id @default(uuid())
+  adminId    String?
+  email      String
+  sessionId  String?       @unique
+  userAgent  String?
+  browser    String?
+  os         String?
+  deviceType String?
+  loginAt    DateTime      @default(now())
+
+  // Relationships
+  admin      AdminProfile? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([adminId, loginAt(sort: Desc)])
+  @@index([loginAt(sort: Desc)])
+}
+
+
+model AdminNotification {
+  id        String    @id @default(uuid())
+  adminId   String
+  category  String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  eventKey  String?
+  createdAt DateTime  @default(now())
+
+  // Relationships
+  admin AdminProfile @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, isRead, createdAt(sort: Desc)])
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([adminId, eventKey])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actorEmail String
+  action     String
+  module     String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  // Relationship (Historical integrity preserved on user deactivation)
+  actor AdminProfile? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([module, action])
+}
+
+// ============================================================
+// 3. MEDIA REGISTRY
+// ============================================================
+
+model MediaAsset {
+  id               String        @id @default(uuid())
+  name             String
+  originalFilename String
+  bucket           String        @default("media-library")
+  storagePath      String
+  publicUrl        String
+  mediaType        MediaType
+  category         MediaCategory
+  mimeType         String
+  fileSize         BigInt
+  fileExtension    String
+  dimensions       String?
+  duration         String?
+  altText          String?
+  description      String?
+  tags             String[]
+  uploadedById     String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relationships
+  uploadedBy              AdminProfile?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  projectThumbnails       Project[]            @relation("ProjectThumbnail")
+  projectGalleryItems     ProjectGalleryItem[]
+  websiteThumbnails       Website[]            @relation("WebsiteThumbnail")
+  websiteGalleryItems     WebsiteGalleryItem[]
+  advertisementThumbnails   Advertisement[]            @relation("AdvertisementThumbnail")
+  advertisementGalleryItems AdvertisementGalleryItem[]
+  awardThumbnails           Award[]                    @relation("AwardThumbnail")
+  awardGalleryItems         AwardGalleryItem[]
+  homepageSections        HomepageSection[]    @relation("HomepageSectionMedia")
+  appearanceLogos         AppearanceConfig[]   @relation("AppearanceLogo")
+  appearanceFavicons      AppearanceConfig[]   @relation("AppearanceFavicon")
+  contactHeroBackgrounds  ContactPageConfig[]  @relation("ContactHeroBackground")
+
+  @@unique([bucket, storagePath])
+  @@index([mediaType])
+  @@index([category])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ============================================================
+// 4. SHOWCASE CONTENT MODELS
+// ============================================================
+
+model Project {
+  id              String        @id @default(uuid())
+  slug            String        @unique
+  name            String
+  description     String
+  fullDescription String?
+  category        String
+  status          PublishStatus @default(DRAFT)
+  featured        Boolean       @default(false)
+  displayOrder    Int           @default(0)
+  projectDuration String?
+  teamSize        String?
+  technologies    String[]
+  tags            String[]
+  liveUrl         String?
+  githubUrl       String?
+  videoUrl        String?
+  thumbnailId     String?
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relationships
+  thumbnail MediaAsset?          @relation("ProjectThumbnail", fields: [thumbnailId], references: [id], onDelete: SetNull)
+  gallery   ProjectGalleryItem[]
+
+  @@index([status, displayOrder])
+  @@index([featured])
+}
+
+model ProjectGalleryItem {
+  id           String @id @default(uuid())
+  projectId    String
+  mediaId      String
+  displayOrder Int    @default(0)
+
+  // Relationships (Preserves MediaAsset on project deletion)
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  media   MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, displayOrder])
+}
+
+model Website {
+  id              String        @id @default(uuid())
+  slug            String        @unique
+  name            String
+  url             String
+  description     String
+  fullDescription String?
+  category        String
+  status          PublishStatus @default(DRAFT)
+  featured        Boolean       @default(false)
+  displayOrder    Int           @default(0)
+  launchDate      String?
+  teamSize        String?
+  technologies    String[]
+  tags            String[]
+  githubUrl       String?
+  videoUrl        String?
+  thumbnailId     String?
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relationships
+  thumbnail MediaAsset?          @relation("WebsiteThumbnail", fields: [thumbnailId], references: [id], onDelete: SetNull)
+  gallery   WebsiteGalleryItem[]
+
+  @@index([status, displayOrder])
+  @@index([featured])
+}
+
+model WebsiteGalleryItem {
+  id           String @id @default(uuid())
+  websiteId    String
+  mediaId      String
+  displayOrder Int    @default(0)
+
+  // Relationships (Preserves MediaAsset on website deletion)
+  website Website    @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  media   MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, displayOrder])
+}
+
+model Advertisement {
+  id              String        @id @default(uuid())
+  slug            String        @unique
+  name            String
+  campaign        String
+  brand           String
+  campaignType    String?
+  description     String
+  fullDescription String?
+  startDate       String?
+  endDate         String?
+  date            String
+  campaignUrl     String?
+  status          PublishStatus @default(DRAFT)
+  featured        Boolean       @default(false)
+  showOnHomepage  Boolean       @default(false)
+  displayOrder    Int           @default(0)
+  thumbnailId     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relationships
+  thumbnail MediaAsset?                @relation("AdvertisementThumbnail", fields: [thumbnailId], references: [id], onDelete: SetNull)
+  gallery   AdvertisementGalleryItem[]
+
+  @@index([status, displayOrder])
+  @@index([showOnHomepage])
+}
+
+model AdvertisementGalleryItem {
+  id              String @id @default(uuid())
+  advertisementId String
+  mediaId         String
+  displayOrder    Int    @default(0)
+
+  // Relationships (Preserves MediaAsset on advertisement deletion)
+  advertisement Advertisement @relation(fields: [advertisementId], references: [id], onDelete: Cascade)
+  media         MediaAsset    @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
+  @@index([advertisementId, displayOrder])
+}
+
+model Award {
+  id              String        @id @default(uuid())
+  slug            String        @unique
+  name            String
+  context         String
+  organization    String
+  category        String
+  date            String
+  description     String
+  fullDescription String?
+  credentialUrl   String?
+  status          PublishStatus @default(DRAFT)
+  showOnHomepage  Boolean       @default(true)
+  displayOrder    Int           @default(0)
+  thumbnailId     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relationships
+  thumbnail MediaAsset?        @relation("AwardThumbnail", fields: [thumbnailId], references: [id], onDelete: SetNull)
+  gallery   AwardGalleryItem[]
+
+  @@index([status, displayOrder])
+  @@index([showOnHomepage])
+}
+
+model AwardGalleryItem {
+  id           String @id @default(uuid())
+  awardId      String
+  mediaId      String
+  displayOrder Int    @default(0)
+
+  // Relationships (Preserves MediaAsset on award deletion)
+  award Award      @relation(fields: [awardId], references: [id], onDelete: Cascade)
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
+  @@index([awardId, displayOrder])
+}
+
+// ============================================================
+// 5. SITE SHELL & LAYOUT MODELS
+// ============================================================
+
+model HomepageSection {
+  id                   String   @id // Fixed key: sec-hero, sec-featured, sec-projects, sec-cta
+  name                 String
+  iconName             String
+  enabled              Boolean  @default(true)
+  displayOrder         Int
+  badge                String?
+  title                String
+  subtitle             String
+  primaryButtonLabel   String?
+  primaryButtonLink    String?
+  secondaryButtonLabel String?
+  secondaryButtonLink  String?
+  mediaAssetId         String?
+  updatedAt            DateTime @updatedAt
+
+  // Relationships
+  mediaAsset MediaAsset? @relation("HomepageSectionMedia", fields: [mediaAssetId], references: [id], onDelete: SetNull)
+
+  @@index([enabled, displayOrder])
+}
+
+model NavigationItem {
+  id           String        @id @default(uuid())
+  label        String
+  link         String
+  type         NavItemType   @default(INTERNAL)
+  status       NavItemStatus @default(ACTIVE)
+  iconName     String?
+  openInNewTab Boolean       @default(false)
+  buttonStyle  String?
+  displayOrder Int           @default(0)
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status, displayOrder])
+}
+
+model FooterSection {
+  id           String   @id @default(uuid())
+  title        String
+  iconName     String?
+  displayOrder Int      @default(0)
+  isVisible    Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  links FooterLink[]
+
+  @@index([isVisible, displayOrder])
+}
+
+model FooterLink {
+  id              String  @id @default(uuid())
+  footerSectionId String
+  label           String
+  url             String
+  openInNewTab    Boolean @default(false)
+  displayOrder    Int     @default(0)
+
+  // Relationships
+  footerSection FooterSection @relation(fields: [footerSectionId], references: [id], onDelete: Cascade)
+
+  @@index([footerSectionId, displayOrder])
+}
+
+model GlobalSocialLink {
+  id           String   @id @default(uuid())
+  platform     String
+  url          String
+  handle       String?
+  iconName     String
+  displayOrder Int      @default(0)
+  isEnabled    Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+
+  @@index([isEnabled, displayOrder])
+}
+
+// ============================================================
+// 6. SINGLETON CONFIGURATION MODELS
+// ============================================================
+
+model AppearanceConfig {
+  id                  String   @id @default("default")
+  themePreset         String   @default("dark")
+  brandPrimaryColor   String   @default("#00FF87")
+  brandSecondaryColor String   @default("#00E5FF")
+  brandAccentColor    String   @default("#FFB800")
+  fontHeading         String   @default("Space Grotesk")
+  fontBody            String   @default("Inter")
+  logoAssetId         String?
+  faviconAssetId      String?
+  enableGlowEffects   Boolean  @default(true)
+  enableAnimations    Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+
+  // Relationships
+  logoAsset    MediaAsset? @relation("AppearanceLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  faviconAsset MediaAsset? @relation("AppearanceFavicon", fields: [faviconAssetId], references: [id], onDelete: SetNull)
+}
+
+model SiteSettings {
+  id                 String   @id @default("default")
+  siteName           String   @default("CobraLearn Innotechcore")
+  tagline            String   @default("Digital Showcase & Technology Hub")
+  siteDescription    String   @default("A cinematic showcase of digital innovation, web experiences, real-time projects and achievements.")
+  siteUrl            String   @default("https://cobralearn.com")
+  contactEmail       String   @default("contact@cobralearn.com")
+  contactPhone       String   @default("+91 98765 43210")
+  contactAddress     String   @default("Hyderabad, Telangana, India")
+  businessHours      String   @default("Mon - Fri: 9:00 AM - 6:00 PM IST")
+  timezone           String   @default("Asia/Kolkata")
+  dateFormat         String   @default("DD/MM/YYYY")
+  timeFormat         String   @default("12-hour")
+  defaultLanguage    String   @default("en")
+  metaKeywords       String[] @default(["technology", "showcase", "web development", "digital innovation"])
+  ogImageUrl         String?
+  notifyOnNewMessage Boolean  @default(true)
+  notificationEmail  String?
+  updatedAt          DateTime @updatedAt
+}
+
+// ============================================================
+// 7. CONTACT CMS & INQUIRY MODELS
+// ============================================================
+
+model ContactPageConfig {
+  id                         String   @id @default("default")
+  badgeText                  String   @default("CONNECT WITH US")
+  heroTitle                  String   @default("Let’s Build the Next Generation of Digital Experiences")
+  heroSubtitle               String   @default("Have a project in mind, an inquiry about our solutions, or interested in a collaboration? Reach out and our team will get back to you promptly.")
+  heroSectionNumber          String   @default("01")
+  heroSectionLabel           String   @default("CONTACT")
+  heroHighlightHeading       String   @default("SOMETHING TOGETHER")
+  heroDescription            String?
+  heroKeywords               String[] @default(["IDEAS", "PARTNERSHIPS", "GROWTH", "TOGETHER"])
+  heroBackgroundAssetId      String?
+  seoPageTitle               String   @default("Contact Us — CobraLearn Innotechcore")
+  seoMetaDescription        String   @default("Have a project, partnership, or idea in mind? Connect with CobraLearn Innotechcore to build impactful digital experiences.")
+  contactEmailDescription    String   @default("For general inquiries and business discussions")
+  contactLocationDescription String   @default("Open for onsite meetings (by appointment)")
+  formTitle                  String   @default("Send Us a Message")
+  formSubtitle               String   @default("Fill out the form below and we will respond within 24 hours.")
+  formSuccessMessage         String   @default("Thank you! Your message has been transmitted successfully. Our team will review and connect with you shortly.")
+  formSubmitButtonText       String   @default("Send Message")
+  formErrorMessage           String   @default("Please check the required fields and try again.")
+  subjectOptions             String[] @default(["General Inquiry", "Project Consultation", "Partnership & Collaboration", "Career & Opportunities", "Technical Support"])
+  enableFaqSection           Boolean  @default(true)
+  enableHighlights           Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
+
+  // Relationships
+  heroBackgroundAsset MediaAsset?          @relation("ContactHeroBackground", fields: [heroBackgroundAssetId], references: [id], onDelete: SetNull)
+  highlights          ContactHighlight[]
+  faqs                ContactFaq[]
+  socialLinks         ContactSocialLink[]
+}
+
+model ContactSocialLink {
+  id              String   @id @default(uuid())
+  contactConfigId String   @default("default")
+  platform        String
+  label           String?
+  url             String
+  iconName        String
+  displayOrder    Int      @default(0)
+  isEnabled       Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+  contactConfig ContactPageConfig @relation(fields: [contactConfigId], references: [id], onDelete: Cascade)
+
+  @@index([contactConfigId, displayOrder])
+}
+
+model ContactHighlight {
+  id              String          @id @default(uuid())
+  contactConfigId String          @default("default")
+  title           String
+  description     String
+  iconName        String
+  accentColor     HighlightAccent @default(EMERALD)
+  displayOrder    Int             @default(0)
+  isEnabled       Boolean         @default(true)
+
+  // Relationships
+  contactConfig ContactPageConfig @relation(fields: [contactConfigId], references: [id], onDelete: Cascade)
+
+  @@index([contactConfigId, displayOrder])
+}
+
+model ContactFaq {
+  id              String  @id @default(uuid())
+  contactConfigId String  @default("default")
+  question        String
+  answer          String
+  iconName        String?
+  displayOrder    Int     @default(0)
+  isEnabled       Boolean @default(true)
+
+  // Relationships
+  contactConfig ContactPageConfig @relation(fields: [contactConfigId], references: [id], onDelete: Cascade)
+
+  @@index([contactConfigId, displayOrder])
+}
+
+model ContactMessage {
+  id         String               @id @default(uuid())
+  fullName   String
+  email      String
+  subject    String
+  message    String
+  status     ContactMessageStatus @default(NEW)
+  adminNotes String?
+  ipAddress  String?
+  userAgent  String?
+  readAt     DateTime?
+  repliedAt  DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  replies    ContactMessageReply[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([email])
+}
+
+model ContactMessageReply {
+  id                String         @id @default(uuid())
+  messageId         String
+  adminId           String?
+  adminEmail        String
+  toEmail           String
+  subject           String
+  bodyText          String
+  bodyHtml          String?
+  provider          String         @default("resend")
+  providerMessageId String?
+  status            String         @default("SENT")
+  errorMessage      String?
+  idempotencyKey    String?        @unique
+  createdAt         DateTime       @default(now())
+
+  // Relationships
+  message           ContactMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  admin             AdminProfile?  @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([messageId, createdAt(sort: Asc)])
+  @@index([adminId])
+}

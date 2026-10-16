@@ -1,0 +1,1 @@
+- Keep the authentication boundary replaceable: the login UI owns validation state while provider integration remains separate, because real authentication is intentionally deferred.
