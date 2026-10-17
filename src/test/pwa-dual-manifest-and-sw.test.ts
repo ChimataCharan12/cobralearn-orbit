@@ -51,9 +51,9 @@ describe("CobraLearn Dual PWA — Architecture & Security Verification", () => {
       expect(publicJson.start_url).toBe("/");
       expect(publicJson.start_url.startsWith(publicJson.scope)).toBe(true);
 
-      // Admin: scope="/admin/" and start_url="/admin/"
-      expect(adminJson.scope).toBe("/admin/");
-      expect(adminJson.start_url).toBe("/admin/");
+      // Admin: scope="/admin" and start_url="/admin"
+      expect(adminJson.scope).toBe("/admin");
+      expect(adminJson.start_url).toBe("/admin");
       expect(adminJson.start_url.startsWith(adminJson.scope)).toBe(true);
 
       // Both must be standalone
