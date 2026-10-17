@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminBranding } from "@/components/AdminBranding";
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
+import { useAuthGuard } from "@/lib/auth/use-auth";
 import environment from "@/assets/cobralearn-admin-environment.jpg";
 
 export const Route = createFileRoute("/admin/profile/change-password")({
@@ -19,6 +20,8 @@ export const Route = createFileRoute("/admin/profile/change-password")({
 });
 
 function ChangePasswordPage() {
+  useAuthGuard("/admin", false);
+
   return (
     <main className="relative min-h-screen lg:h-dvh lg:min-h-0 lg:max-h-dvh lg:overflow-hidden w-full overflow-x-hidden bg-[#020604] flex items-center justify-center select-none">
       {/* Pure Scenery Environment Background Plate */}

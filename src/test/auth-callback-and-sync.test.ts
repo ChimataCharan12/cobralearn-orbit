@@ -7,6 +7,8 @@ const mockExchangeCodeForSession = vi.fn();
 const mockResetPasswordForEmail = vi.fn();
 const mockGetSession = vi.fn();
 const mockOnAuthStateChange = vi.fn();
+const mockVerifyOtp = vi.fn();
+const mockSetSession = vi.fn();
 
 vi.mock("@/lib/supabase/browser", () => ({
   getSupabaseBrowserClient: () => ({
@@ -15,6 +17,8 @@ vi.mock("@/lib/supabase/browser", () => ({
       resetPasswordForEmail: mockResetPasswordForEmail,
       getSession: mockGetSession,
       onAuthStateChange: mockOnAuthStateChange,
+      verifyOtp: mockVerifyOtp,
+      setSession: mockSetSession,
     },
   }),
 }));
@@ -84,6 +88,59 @@ describe("Phase 6C — Auth Callback & Session Synchronization", () => {
       const result = await authService.exchangeCodeForSession("invalid-code");
       expect(result.data).toBeNull();
       expect(result.error?.message).toContain("Invalid or expired");
+    });
+  });
+
+  describe("Token Hash Verification (verifyOtp)", () => {
+    it("verifies recovery token_hash successfully", async () => {
+      const mockUser = { id: "user-otp-123", email: "admin@example.com" };
+      const mockSession = { access_token: "mock-otp-token", user: mockUser };
+
+      mockVerifyOtp.mockResolvedValueOnce({
+        data: { user: mockUser, session: mockSession },
+        error: null,
+      });
+
+      const result = await authService.verifyOtp({ token_hash: "valid-token-hash", type: "recovery" });
+      expect(mockVerifyOtp).toHaveBeenCalledWith({ token_hash: "valid-token-hash", type: "recovery" });
+      expect(result.data?.user.id).toBe("user-otp-123");
+      expect(result.data?.session.access_token).toBe("mock-otp-token");
+      expect(result.error).toBeNull();
+    });
+
+    it("handles invalid or expired token_hash gracefully", async () => {
+      mockVerifyOtp.mockResolvedValueOnce({
+        data: { user: null, session: null },
+        error: new Error("Token expired or invalid"),
+      });
+
+      const result = await authService.verifyOtp({ token_hash: "expired-hash", type: "recovery" });
+      expect(result.data).toBeNull();
+      expect(result.error?.message).toContain("Token expired or invalid");
+    });
+  });
+
+  describe("Session Initialization from URL Hash (setSession)", () => {
+    it("initializes active session from access_token and refresh_token", async () => {
+      const mockUser = { id: "user-hash-123", email: "admin@example.com" };
+      const mockSession = { access_token: "hash-access-token", user: mockUser };
+
+      mockSetSession.mockResolvedValueOnce({
+        data: { user: mockUser, session: mockSession },
+        error: null,
+      });
+
+      const result = await authService.setSession({
+        access_token: "hash-access-token",
+        refresh_token: "hash-refresh-token",
+      });
+
+      expect(mockSetSession).toHaveBeenCalledWith({
+        access_token: "hash-access-token",
+        refresh_token: "hash-refresh-token",
+      });
+      expect(result.data?.session.access_token).toBe("hash-access-token");
+      expect(result.error).toBeNull();
     });
   });
 

@@ -3,7 +3,14 @@ import { AdminBranding } from "@/components/AdminBranding";
 import { SessionExpiredCard } from "@/components/auth/SessionExpiredCard";
 import environment from "@/assets/cobralearn-admin-environment.jpg";
 
+interface SessionExpiredSearch {
+  next?: string | undefined;
+}
+
 export const Route = createFileRoute("/admin/session-expired")({
+  validateSearch: (search: Record<string, unknown>): SessionExpiredSearch => ({
+    next: typeof search["next"] === "string" ? search["next"] : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Session Expired — CobraLearn Innotechcore Admin" },

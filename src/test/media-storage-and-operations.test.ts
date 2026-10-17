@@ -165,7 +165,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     };
   });
 
-  function setupAuthUser(userProfile: AdminProfile | null) {
+  function setupAuthUser(userProfile: AdminProfile | null, currentLevel: "aal1" | "aal2" = "aal1") {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockImplementation((token?: string) => {
@@ -183,6 +183,12 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
         getSession: vi.fn().mockResolvedValue({
           data: { session: userProfile ? { user: { id: userProfile.id, email: userProfile.email }, access_token: "jwt" } : null },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: userProfile ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
   }
@@ -966,7 +972,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("denies EDITOR role from deleting media assets (Requires MEDIA_DELETE)", async () => {
-      setupAuthUser(editorProfile);
+      setupAuthUser(editorProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-editor" },
       });
@@ -977,7 +983,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("prevents deletion if media asset is referenced by active projects (Referential Integrity)", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1004,7 +1010,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("prevents deletion if media asset is referenced as active Logo in Appearance Settings", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1031,7 +1037,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("prevents deletion if media asset is referenced as active Favicon in Appearance Settings", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1058,7 +1064,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("prevents deletion if media asset is referenced in Homepage section", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1085,7 +1091,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("prevents deletion if media asset is referenced as hero background in Contact Page configuration (SEC-MED-01)", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1113,7 +1119,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("allows deletion if media asset is unreferenced by Contact Page configuration (SEC-MED-01)", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1146,7 +1152,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("allows ADMIN to delete unreferenced media and removes physical storage object", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1166,7 +1172,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("returns partial success with warning when storage remove returns an error", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });
@@ -1193,7 +1199,7 @@ describe("Item 6 — Media Library & Supabase Storage Server Operations", () => 
     });
 
     it("returns partial success with warning when storage remove rejects or throws an exception", async () => {
-      setupAuthUser(adminProfile);
+      setupAuthUser(adminProfile, "aal2");
       const req = new Request(`https://api.internal/admin/media/${testAssetId}`, {
         headers: { Authorization: "Bearer token-admin" },
       });

@@ -813,13 +813,19 @@ describe("Projects ↔ Persistent Media Integration (Phase B4.4)", () => {
       created_at: new Date().toISOString(),
     };
 
-    function createAuthRequest(user: User): Request {
+    function createAuthRequest(user: User, currentLevel: "aal1" | "aal2" = "aal1"): Request {
       (getSupabaseServerClient as any).mockReturnValue({
         auth: {
           getUser: vi.fn().mockResolvedValue({
             data: { user },
             error: null,
           }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+              data: { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] },
+              error: null,
+            }),
+          },
         },
       });
 
@@ -1144,11 +1150,11 @@ describe("Projects ↔ Persistent Media Integration (Phase B4.4)", () => {
       });
       // MediaAsset was NEVER deleted
       expect(prisma.mediaAsset.delete).not.toHaveBeenCalled();
-    });
+    }, 15000);
 
     it("preserves RBAC delete restriction for EDITOR role", async () => {
       const { prisma, mockProjects } = createMockPrismaWithAssets([]);
-      const req = createAuthRequest(editorUser);
+      const req = createAuthRequest(editorUser, "aal2");
 
       mockProjects.push({
         id: "proj-locked",

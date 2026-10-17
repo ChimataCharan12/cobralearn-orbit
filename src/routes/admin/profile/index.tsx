@@ -56,8 +56,8 @@ function AdminProfilePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ProfileTabId>("profile-info");
 
-  // Authentication Guard
-  useAuthGuard();
+  // Authentication Guard (strictly disallows quarantined admins; redirects to /admin/mfa-recovery)
+  useAuthGuard("/admin", false);
 
   // Load real PostgreSQL AdminProfile
   const { profile, isLoading, isSaving, error, reloadProfile, updateProfile, uploadAvatar } = useAdminProfile();

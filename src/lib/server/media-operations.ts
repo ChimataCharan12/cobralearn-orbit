@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { PrismaClient, MediaAsset, MediaType, MediaCategory } from "@prisma/client";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requirePermission } from "@/lib/auth/server-auth";
+import { requirePermission, requireAal2Permission } from "@/lib/auth/server-auth";
 import { AdminPermissions } from "@/lib/auth/rbac";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -759,7 +759,7 @@ export async function deleteAdminMediaAssetOperation(
   prismaClient?: PrismaClient,
   storageClientOverride?: SupabaseClient
 ): Promise<DeleteMediaResult> {
-  const context = await requirePermission(request, AdminPermissions.MEDIA_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.MEDIA_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
   const storage = storageClientOverride || getSupabaseAdminClient();
 

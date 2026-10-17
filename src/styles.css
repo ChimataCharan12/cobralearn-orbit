@@ -978,13 +978,13 @@ html.admin-theme-light,
 
 .showcase-section {
   --section-accent: var(--orange);
-  min-height: 242px;
+  min-height: clamp(485px, 54vh, 620px);
   position: relative;
   overflow: hidden;
   display: grid;
   grid-template-columns: minmax(300px, 30%) 1fr;
   align-items: center;
-  padding: 14px max(7.5vw, calc((100% - 1220px)/2));
+  padding: clamp(44px, 5.5vh, 66px) max(7.5vw, calc((100% - 1220px)/2));
   border-bottom: 1px solid oklch(0.62 0.05 175 / .48);
   isolation: isolate;
 }
@@ -1015,28 +1015,29 @@ html.admin-theme-light,
   align-self: center;
   position: relative;
   z-index: 4;
-  max-width: 340px;
+  max-width: 375px;
+  margin-left: -28px;
 }
 .section-number {
   display: flex;
   align-items: center;
   gap: 14px;
   color: var(--section-accent);
-  font: 700 14px var(--font-display, "Oxanium", sans-serif);
+  font: 700 17px var(--font-display, "Oxanium", sans-serif);
 }
 .section-number i {
-  width: 47px;
-  height: 1px;
+  width: 50px;
+  height: 1.5px;
   background: var(--section-accent);
   box-shadow: 0 0 8px var(--section-accent);
 }
 .section-copy > p {
   margin: 1px 0 0;
-  font: 600 18px/.9 var(--font-display, "Oxanium", sans-serif);
+  font: 600 21px/.92 var(--font-display, "Oxanium", sans-serif);
 }
 .section-copy h2 {
   margin: 0;
-  font: 700 clamp(31px, 3vw, 48px)/.79 var(--font-display, "Oxanium", sans-serif);
+  font: 700 clamp(36px, 3.4vw, 54px)/.82 var(--font-display, "Oxanium", sans-serif);
   color: var(--section-accent);
   text-shadow: 0 0 20px color-mix(in oklab, var(--section-accent) 30%, transparent);
   letter-spacing: 0;
@@ -1046,20 +1047,20 @@ html.admin-theme-light,
 }
 .section-copy > small {
   display: block;
-  max-width: 310px;
-  margin: 11px 0 12px;
+  max-width: 345px;
+  margin: 12px 0 14px;
   color: oklch(0.91 0.01 160);
-  font: 500 12px/1.3 var(--font-sans);
+  font: 500 15px/1.4 var(--font-sans);
 }
 .section-button {
-  height: 32px;
+  height: 36px;
   border-color: var(--section-accent);
   color: oklch(0.97 0.01 160);
   background: oklch(0.03 0.005 160 / .7);
   border-radius: 20px;
-  padding-inline: 18px 10px;
+  padding-inline: 20px 12px;
   box-shadow: 0 0 10px color-mix(in oklab, var(--section-accent) 45%, transparent), inset 0 0 10px color-mix(in oklab, var(--section-accent) 12%, transparent);
-  font: 600 11px var(--font-sans);
+  font: 600 13.5px var(--font-sans);
 }
 .section-button:hover {
   color: oklch(0.99 0 0);
@@ -1068,29 +1069,29 @@ html.admin-theme-light,
 }
 .section-button svg {
   border-radius: 50%;
-  width: 18px;
-  height: 18px;
-  padding: 3px;
+  width: 20px;
+  height: 20px;
+  padding: 3.5px;
   background: oklch(0.92 0.01 160);
   color: var(--deep-black);
 }
 .showcase-carousel {
   min-width: 0;
   position: relative;
-  height: 205px;
+  height: 350px;
   perspective: 1000px;
 }
 .carousel-stage {
-  height: 185px;
+  height: 315px;
   position: relative;
   transform-style: preserve-3d;
 }
 .carousel-slot {
   position: absolute;
-  width: min(390px, 48%);
-  height: 172px;
+  width: min(480px, 50%);
+  height: 285px;
   left: 24%;
-  top: 6px;
+  top: 12px;
   transform-origin: center;
 }
 .showcase-card {
@@ -1160,7 +1161,7 @@ html.admin-theme-light,
 }
 .carousel-dots {
   position: absolute;
-  bottom: 1px;
+  bottom: 4px;
   left: 50%;
   display: flex;
   gap: 7px;
@@ -1195,7 +1196,7 @@ html.admin-theme-light,
   align-items: center;
   gap: 8px;
   color: oklch(0.62 0.02 160);
-  font: 600 10px var(--font-display, "Oxanium", sans-serif);
+  font: 600 12px var(--font-display, "Oxanium", sans-serif);
 }
 .section-indicator i {
   width: 6px;
@@ -1351,10 +1352,17 @@ html.admin-theme-light,
   .service-rail { right: 4vw; width: 240px; }
   .hero-image { object-position: 58% center; }
   .hero-shade { background: linear-gradient(90deg, oklch(0.035 0.009 165 / .96), oklch(0.035 0.009 165 / .63) 55%, oklch(0.035 0.009 165 / .45)); }
-  .showcase-section { padding-inline: 5vw; grid-template-columns: 280px 1fr; }
-  .carousel-slot { width: 58%; left: 20%; }
+  .showcase-section {
+    min-height: 460px;
+    padding: 37px 5vw;
+    grid-template-columns: 280px 1fr;
+  }
+  .section-copy { margin-left: 0; }
+  .showcase-carousel { height: 310px; }
+  .carousel-stage { height: 280px; }
+  .carousel-slot { width: 60%; height: 255px; left: 19%; top: 10px; }
   .section-indicator { display: none; }
-  .section-copy h2 { font-size: 32px; }
+  .section-copy h2 { font-size: 38px; }
 }
 
 @media (max-width: 760px) {
@@ -1393,13 +1401,21 @@ html.admin-theme-light,
   .service-item strong { font-size: 12px; }
   .service-item small { display: none; }
   .scroll-cue { display: none; }
-  .showcase-section { min-height: 540px; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 20px; padding: 35px 20px; }
-  .section-copy { max-width: 100%; }
-  .section-copy h2 { font-size: clamp(34px, 10vw, 46px); }
-  .section-copy > small { font-size: 13px; }
-  .showcase-carousel { height: 230px; margin-inline: -10px; }
-  .carousel-stage { height: 205px; }
-  .carousel-slot { width: 75%; height: 190px; left: 12.5%; }
+  .showcase-section {
+    min-height: 560px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 22px;
+    padding: 45px 20px;
+  }
+  .section-copy { max-width: 100%; margin-left: 0; }
+  .section-copy h2 { font-size: clamp(38px, 10.5vw, 52px); }
+  .section-copy > small { font-size: 15px; }
+  .showcase-carousel { height: 275px; margin-inline: -10px; }
+  .carousel-stage { height: 245px; }
+  .carousel-slot { width: 78%; height: 225px; left: 11%; top: 8px; }
   .card-copy strong { font-size: 14px; }
   .site-footer { min-height: 120px; flex-wrap: wrap; padding: 18px 20px; gap: 12px; }
   .site-footer p { order: 3; width: 100%; justify-content: center; font-size: 7px; }

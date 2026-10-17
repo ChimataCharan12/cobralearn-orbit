@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Home, LockKeyhole } from "lucide-react";
+import { ArrowRight, Home, LockKeyhole, LogIn } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 export function AccessDeniedCard() {
@@ -37,14 +37,14 @@ export function AccessDeniedCard() {
 
         {/* Action Buttons */}
         <div className="mt-6 flex flex-col gap-2.5">
-          {/* Primary Action: Back to Dashboard */}
+          {/* Primary Action: Return to Sign In */}
           <button
             type="button"
-            onClick={() => navigate({ to: "/admin/dashboard" })}
+            onClick={() => navigate({ to: "/admin" })}
             className="flex h-[42px] xl:h-[46px] w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-[#00ff87] via-[#00f28f] to-[#00d68f] text-[14.5px] sm:text-[15.5px] font-bold text-[#02180c] shadow-[0_0_22px_rgba(0,255,135,0.5)] hover:shadow-[0_0_30px_rgba(0,255,135,0.7)] hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer"
           >
-            <ArrowLeft className="size-4 stroke-[2.5]" />
-            <span>Back to Dashboard</span>
+            <LogIn className="size-4 stroke-[2.5]" />
+            <span>Return to Sign In</span>
             <ArrowRight className="size-4 stroke-[2.5]" />
           </button>
 

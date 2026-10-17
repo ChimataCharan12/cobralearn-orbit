@@ -56,6 +56,14 @@ vi.mock("@/lib/auth/server-auth", async (importOriginal) => {
   return {
     ...actual,
     requireAdminProfile: vi.fn().mockImplementation(async () => currentServerContext),
+    requireAal2: vi.fn().mockImplementation(async () => currentServerContext),
+    requireAal2Permission: vi.fn().mockImplementation(async (_req, perm) => {
+      const { canPerform } = await import("@/lib/auth/rbac");
+      if (!canPerform(currentServerContext.profile.role, perm)) {
+        throw new Error(`Forbidden: Insufficient permissions for ${perm}`);
+      }
+      return currentServerContext;
+    }),
     requirePermission: vi.fn().mockImplementation(async (_req, perm) => {
       const { canPerform } = await import("@/lib/auth/rbac");
       if (!canPerform(currentServerContext.profile.role, perm)) {

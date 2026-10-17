@@ -396,13 +396,19 @@ describe("ITEM 2: Projects Module Database & Public Showcase Integration Test Su
     } as unknown as PrismaClient;
   }
 
-  function createAuthRequest(user: User | null): Request {
+  function createAuthRequest(user: User | null, currentLevel: "aal1" | "aal2" = "aal1"): Request {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user },
           error: user ? null : { message: "Invalid session" },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: user ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
 
@@ -680,7 +686,7 @@ describe("ITEM 2: Projects Module Database & Public Showcase Integration Test Su
   describe("6. RBAC Deletion Restrictions (SUPER_ADMIN / ADMIN vs EDITOR)", () => {
     it("allows ADMIN to delete a project and records PROJECT_DELETED audit log", async () => {
       const prisma = createMockPrisma();
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
 
       const res = await deleteAdminProjectOperation(req, "proj-2", prisma);
       expect(res.success).toBe(true);
@@ -698,7 +704,7 @@ describe("ITEM 2: Projects Module Database & Public Showcase Integration Test Su
 
     it("DENIES EDITOR role from deleting a project (RBAC Matrix Enforced)", async () => {
       const prisma = createMockPrisma();
-      const req = createAuthRequest(editorUser);
+      const req = createAuthRequest(editorUser, "aal2");
 
       // EDITOR does not have CMS_DELETE permission
       await expect(deleteAdminProjectOperation(req, "proj-1", prisma)).rejects.toThrow(/permission|forbidden|unauthorized/i);
@@ -1090,7 +1096,7 @@ describe("ITEM 2: Projects Module Database & Public Showcase Integration Test Su
         },
       } as unknown as PrismaClient;
 
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
 
       // Attempting to delete a media asset referenced by a project thumbnail must be blocked
       await expect(

@@ -8,7 +8,7 @@ import type {
   NavItemStatus,
 } from "@prisma/client";
 import { AdminPermissions } from "@/lib/auth/rbac";
-import { requirePermission } from "@/lib/auth/server-auth";
+import { requirePermission, requireAal2Permission } from "@/lib/auth/server-auth";
 import {
   INITIAL_NAV_ITEMS,
   INITIAL_FOOTER_SECTIONS,
@@ -357,7 +357,7 @@ export async function deleteAdminNavItemOperation(
   id: string,
   prismaClient?: PrismaClient
 ): Promise<{ deletedId: string }> {
-  const context = await requirePermission(request, AdminPermissions.CMS_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CMS_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   const existing = await prisma.navigationItem.findUnique({
@@ -567,7 +567,7 @@ export async function deleteAdminFooterSectionOperation(
   id: string,
   prismaClient?: PrismaClient
 ): Promise<{ deletedId: string }> {
-  const context = await requirePermission(request, AdminPermissions.CMS_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CMS_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   const existing = await prisma.footerSection.findUnique({
@@ -750,7 +750,7 @@ export async function deleteAdminSocialLinkOperation(
   id: string,
   prismaClient?: PrismaClient
 ): Promise<{ deletedId: string }> {
-  const context = await requirePermission(request, AdminPermissions.CMS_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CMS_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   const existing = await prisma.globalSocialLink.findUnique({

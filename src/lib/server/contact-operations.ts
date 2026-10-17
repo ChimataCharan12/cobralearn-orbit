@@ -1,6 +1,6 @@
 import type { PrismaClient, ContactMessageStatus, HighlightAccent } from "@prisma/client";
 import { AdminPermissions } from "@/lib/auth/rbac";
-import { requirePermission } from "@/lib/auth/server-auth";
+import { requirePermission, requireAal2Permission } from "@/lib/auth/server-auth";
 import { createResendEmailClient, type EmailClient } from "./email/resend-client";
 import { createNotificationEvent } from "./notification-operations";
 
@@ -1210,7 +1210,7 @@ export async function deleteAdminContactMessageOperation(
   messageId: string,
   prismaClient?: PrismaClient
 ) {
-  const context = await requirePermission(request, AdminPermissions.CONTACT_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CONTACT_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   if (!messageId || typeof messageId !== "string" || !messageId.trim()) {
@@ -1248,7 +1248,7 @@ export async function bulkDeleteAdminContactMessagesOperation(
   messageIds: string[],
   prismaClient?: PrismaClient
 ) {
-  const context = await requirePermission(request, AdminPermissions.CONTACT_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CONTACT_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   if (!Array.isArray(messageIds) || messageIds.length === 0) {

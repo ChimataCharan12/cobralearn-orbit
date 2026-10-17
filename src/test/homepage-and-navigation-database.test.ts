@@ -104,6 +104,20 @@ describe("Homepage & Navigation Database-Backed CMS Test Suite", () => {
           }
           return Promise.resolve({ data: { user: null }, error: new Error("Invalid token") });
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockImplementation((token?: string) => {
+            if (token === "admin-token") {
+              return Promise.resolve({
+                data: { currentLevel: "aal2", nextLevel: "aal2", currentAuthenticationMethods: [] },
+                error: null,
+              });
+            }
+            return Promise.resolve({
+              data: { currentLevel: "aal1", nextLevel: "aal2", currentAuthenticationMethods: [] },
+              error: null,
+            });
+          }),
+        },
       },
     });
 

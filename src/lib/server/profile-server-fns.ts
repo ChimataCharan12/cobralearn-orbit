@@ -63,6 +63,24 @@ function createServerOpRequest(
       if (incomingUa) {
         headers.set("User-Agent", incomingUa);
       }
+      const origin = incomingReq.headers.get("origin");
+      if (origin) headers.set("Origin", origin);
+
+      const referer = incomingReq.headers.get("referer");
+      if (referer) headers.set("Referer", referer);
+
+      // Forward proxy IP headers
+      const cfIp = incomingReq.headers.get("cf-connecting-ip");
+      if (cfIp) headers.set("cf-connecting-ip", cfIp);
+
+      const trueClientIp = incomingReq.headers.get("true-client-ip");
+      if (trueClientIp) headers.set("true-client-ip", trueClientIp);
+
+      const realIp = incomingReq.headers.get("x-real-ip");
+      if (realIp) headers.set("x-real-ip", realIp);
+
+      const forwarded = incomingReq.headers.get("x-forwarded-for");
+      if (forwarded) headers.set("x-forwarded-for", forwarded);
     }
   } catch {
     // Graceful fallback for non-HTTP environments (e.g. Unit tests)

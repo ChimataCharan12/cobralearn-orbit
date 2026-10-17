@@ -1,8 +1,32 @@
 import { ArrowRight, Clock, Home, LogIn } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { safeRedirect } from "@/lib/auth/safe-redirect";
 
 export function SessionExpiredCard() {
   const navigate = useNavigate();
+
+  let nextParam: string | null = null;
+  if (typeof window !== "undefined") {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      nextParam = urlParams.get("next");
+    } catch {}
+  }
+  const safeNext = safeRedirect(nextParam, "");
+
+  const handleSignInAgain = () => {
+    if (
+      safeNext &&
+      safeNext !== "/admin" &&
+      safeNext !== "/admin/" &&
+      safeNext !== "/admin/login" &&
+      safeNext !== "/admin/session-expired"
+    ) {
+      navigate({ to: "/admin", search: { next: safeNext } as any });
+    } else {
+      navigate({ to: "/admin" });
+    }
+  };
 
   return (
     <section className="flex w-full lg:w-[44%] max-w-[460px] items-center justify-center my-auto py-2 lg:py-0">
@@ -40,7 +64,7 @@ export function SessionExpiredCard() {
           {/* Primary Action: Sign In Again */}
           <button
             type="button"
-            onClick={() => navigate({ to: "/admin" })}
+            onClick={handleSignInAgain}
             className="flex h-[42px] xl:h-[46px] w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-[#00ff87] via-[#00f28f] to-[#00d68f] text-[14.5px] sm:text-[15.5px] font-bold text-[#02180c] shadow-[0_0_22px_rgba(0,255,135,0.5)] hover:shadow-[0_0_30px_rgba(0,255,135,0.7)] hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer"
           >
             <LogIn className="size-4 stroke-[2.5]" />

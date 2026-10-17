@@ -317,6 +317,135 @@ describe("Phase 7B — Centralized RBAC Foundation & Server-Side Authorization",
 
       await expect(requireAdminProfile(req, failingPrisma)).rejects.toThrow("Database connection failure");
     });
+
+    it("Allows self-profile retrieval under allowQuarantined when mfaRecoveryPending column is missing (P2022)", async () => {
+      setupAuthMock(superAdminUser);
+      const p2022Error = new Error("The column AdminProfile.mfaRecoveryPending does not exist in the current database.") as any;
+      p2022Error.code = "P2022";
+      p2022Error.meta = { column: "AdminProfile.mfaRecoveryPending" };
+
+      const fallbackProfile = {
+        id: superAdminUuid,
+        email: "superadmin@cobralearn.com",
+        fullName: "Super Administrator",
+        role: "SUPER_ADMIN",
+        isActive: true,
+      };
+
+      const p2022Prisma = {
+        adminProfile: {
+          findUnique: vi
+            .fn()
+            .mockRejectedValueOnce(p2022Error)
+            .mockResolvedValueOnce(fallbackProfile),
+        },
+      } as unknown as PrismaClient;
+
+      const req = new Request("http://localhost:3000/api/admin/metrics", {
+        headers: { authorization: "Bearer token" },
+      });
+
+      // allowQuarantined: true (used by getSelfProfile during MFA login)
+      const context = await requireAdminProfile(req, p2022Prisma, { allowQuarantined: true });
+      expect(context.profile.id).toBe(superAdminUuid);
+      expect(context.profile.role).toBe("SUPER_ADMIN");
+      expect(p2022Prisma.adminProfile.findUnique).toHaveBeenCalledTimes(2);
+    });
+
+    it("Fails closed for protected operations when mfaRecoveryPending column is missing and recovery table cannot be verified", async () => {
+      setupAuthMock(superAdminUser);
+      const p2022Error = new Error("The column AdminProfile.mfaRecoveryPending does not exist in the current database.") as any;
+      p2022Error.code = "P2022";
+      p2022Error.meta = { column: "AdminProfile.mfaRecoveryPending" };
+
+      const fallbackProfile = {
+        id: superAdminUuid,
+        email: "superadmin@cobralearn.com",
+        fullName: "Super Administrator",
+        role: "SUPER_ADMIN",
+        isActive: true,
+      };
+
+      const p2022Prisma = {
+        adminProfile: {
+          findUnique: vi
+            .fn()
+            .mockRejectedValueOnce(p2022Error)
+            .mockResolvedValueOnce(fallbackProfile),
+        },
+        adminMfaRecovery: {
+          findFirst: vi.fn().mockRejectedValue(new Error("The table AdminMfaRecovery does not exist")),
+        },
+      } as unknown as PrismaClient;
+
+      const req = new Request("http://localhost:3000/api/admin/metrics", {
+        headers: { authorization: "Bearer token" },
+      });
+
+      // Protected operational request without allowQuarantined fails closed
+      await expect(requireAdminProfile(req, p2022Prisma)).rejects.toThrow(
+        "Forbidden: MFA_REENROLLMENT_REQUIRED"
+      );
+    });
+
+    it("Fails closed when active recovery record is found even if mfaRecoveryPending column is missing", async () => {
+      setupAuthMock(superAdminUser);
+      const p2022Error = new Error("The column AdminProfile.mfaRecoveryPending does not exist in the current database.") as any;
+      p2022Error.code = "P2022";
+      p2022Error.meta = { column: "AdminProfile.mfaRecoveryPending" };
+
+      const fallbackProfile = {
+        id: superAdminUuid,
+        email: "superadmin@cobralearn.com",
+        fullName: "Super Administrator",
+        role: "SUPER_ADMIN",
+        isActive: true,
+      };
+
+      const p2022Prisma = {
+        adminProfile: {
+          findUnique: vi
+            .fn()
+            .mockRejectedValueOnce(p2022Error)
+            .mockResolvedValueOnce(fallbackProfile),
+        },
+        adminMfaRecovery: {
+          findFirst: vi.fn().mockResolvedValue({ id: "rec-123", status: "PENDING" }),
+        },
+      } as unknown as PrismaClient;
+
+      const req = new Request("http://localhost:3000/api/admin/metrics", {
+        headers: { authorization: "Bearer token" },
+      });
+
+      await expect(requireAdminProfile(req, p2022Prisma)).rejects.toThrow(
+        "Forbidden: MFA_REENROLLMENT_REQUIRED"
+      );
+    });
+
+    it("Strictly denies access when Supabase user ID does not match AdminProfile, without primary-key mutation", async () => {
+      const authUserDifferentUuid = {
+        id: "unlinked-supabase-auth-uuid",
+        email: "superadmin@cobralearn.com",
+      } as any;
+      setupAuthMock(authUserDifferentUuid);
+
+      const mockPrismaNoMutation = {
+        adminProfile: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          update: vi.fn(),
+        },
+      } as unknown as PrismaClient;
+
+      const req = new Request("http://localhost:3000/api/admin/metrics", {
+        headers: { authorization: "Bearer token" },
+      });
+
+      await expect(requireAdminProfile(req, mockPrismaNoMutation)).rejects.toThrow(
+        "Forbidden: AdminProfile not found for authenticated user"
+      );
+      expect(mockPrismaNoMutation.adminProfile.update).not.toHaveBeenCalled();
+    });
   });
 
   // ==========================================

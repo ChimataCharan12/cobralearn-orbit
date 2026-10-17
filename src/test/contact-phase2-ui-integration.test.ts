@@ -533,6 +533,12 @@ describe("Contact Module Phase 2 — Admin UI & Public Integration Test Suite", 
             data: { user: { id: superAdminUuid, email: "superadmin@cobralearn.com" } },
             error: null,
           }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+              data: { currentLevel: "aal2", nextLevel: "aal2", currentAuthenticationMethods: [] },
+              error: null,
+            }),
+          },
         },
       };
       (getSupabaseServerClient as any).mockReturnValue(mockSupabase);

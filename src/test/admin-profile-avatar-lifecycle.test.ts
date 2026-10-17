@@ -37,6 +37,7 @@ let currentAdminContext = {
 vi.mock("@/lib/auth/server-auth", () => ({
   requireAdminProfile: vi.fn().mockImplementation(async () => currentAdminContext),
   requirePermission: vi.fn().mockImplementation(async () => currentAdminContext),
+  requireAal2: vi.fn().mockImplementation(async () => currentAdminContext),
 }));
 
 describe("Phase 1: Admin Avatar Lifecycle & Storage Cleanup Suite", () => {

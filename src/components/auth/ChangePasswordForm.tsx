@@ -1,12 +1,13 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UnsavedChangesModal } from "@/components/modals/UnsavedChangesModal";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { authService } from "@/lib/auth/auth-service";
+import { adminClient } from "@/lib/api/admin-client";
 
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -20,7 +21,27 @@ export function ChangePasswordForm() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  // Clear sensitive credentials from memory on unmount
+  useEffect(() => {
+    return () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    };
+  }, []);
+
   const isDirty = Boolean(currentPassword || newPassword || confirmPassword);
+
+  // Dynamic password validation rules
+  const hasMinLength = newPassword.length >= 8;
+  const hasUpperLower = /[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword);
+  const hasNumber = /\d/.test(newPassword);
+  const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
+
+  const passedCount = [hasMinLength, hasUpperLower, hasNumber, hasSpecial].filter(Boolean).length;
+  // If user hasn't typed yet, default visual display matches mockup (or adapts dynamically)
+  const displayScore = newPassword ? passedCount : 4;
+  const strengthText = newPassword.length === 0 ? "Strong" : passedCount <= 1 ? "Weak" : passedCount <= 3 ? "Medium" : "Strong";
 
   const {
     isSaving,
@@ -43,38 +64,44 @@ export function ChangePasswordForm() {
         setError("New password must be at least 8 characters long.");
         throw new Error("Password too short");
       }
+      if (!hasUpperLower || !hasNumber || !hasSpecial) {
+        setError("Password does not meet complexity requirements.");
+        throw new Error("Password complexity not met");
+      }
       if (newPassword !== confirmPassword) {
         setError("New password and confirmation do not match.");
         throw new Error("Passwords do not match");
       }
-
-      const verifyResult = await authService.verifyCurrentPassword(currentPassword);
-      if (verifyResult.error) {
-        setError(verifyResult.error.message || "Current password is incorrect.");
-        throw verifyResult.error;
+      if (newPassword === currentPassword) {
+        setError("New password cannot be the same as your current password.");
+        throw new Error("New password cannot be the same as current password");
       }
 
-      const result = await authService.updatePassword(newPassword);
-      if (result.error) {
-        setError(result.error.message || "Failed to update password.");
-        throw result.error;
+      const result = await adminClient.changePassword({
+        currentPassword,
+        newPassword,
+      });
+
+      if (!result.success) {
+        const errorMsg = result.error || "Failed to update password.";
+        setError(errorMsg);
+        throw new Error(errorMsg);
       }
 
       setIsDirty(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+
+      try {
+        await authService.signOut();
+      } catch {
+        // Non-fatal
+      }
+
       navigate({ to: "/admin/password-updated" });
     },
   });
-
-  // Dynamic password validation rules
-  const hasMinLength = newPassword.length >= 8;
-  const hasUpperLower = /[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword);
-  const hasNumber = /\d/.test(newPassword);
-  const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
-
-  const passedCount = [hasMinLength, hasUpperLower, hasNumber, hasSpecial].filter(Boolean).length;
-  // If user hasn't typed yet, default visual display matches mockup (or adapts dynamically)
-  const displayScore = newPassword ? passedCount : 4;
-  const strengthText = newPassword.length === 0 ? "Strong" : passedCount <= 1 ? "Weak" : passedCount <= 3 ? "Medium" : "Strong";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,8 +116,18 @@ export function ChangePasswordForm() {
       return;
     }
 
+    if (!hasUpperLower || !hasNumber || !hasSpecial) {
+      setError("Password does not meet complexity requirements.");
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setError("New password and confirmation do not match.");
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setError("New password cannot be the same as your current password.");
       return;
     }
 
@@ -98,21 +135,29 @@ export function ChangePasswordForm() {
     setIsSaving(true);
 
     try {
-      const verifyResult = await authService.verifyCurrentPassword(currentPassword);
-      if (verifyResult.error) {
-        setError(verifyResult.error.message || "Current password is incorrect.");
+      const result = await adminClient.changePassword({
+        currentPassword,
+        newPassword,
+      });
+
+      if (!result.success) {
+        setError(result.error || "Failed to update password.");
         setIsSaving(false);
         return;
       }
 
-      const result = await authService.updatePassword(newPassword);
-      if (result.error) {
-        setError(result.error.message || "Failed to update password.");
-        setIsSaving(false);
-        return;
-      }
       setIsDirty(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
       setIsSaving(false);
+
+      try {
+        await authService.signOut();
+      } catch {
+        // Non-fatal
+      }
+
       navigate({ to: "/admin/password-updated" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update password.");

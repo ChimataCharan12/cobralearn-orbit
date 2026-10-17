@@ -90,7 +90,10 @@ describe("Production-Ready Contact Messages Module — End-to-End Suite", () => 
     },
   };
 
-  const createAuthRequest = (token: string): Request => {
+  let mockAssuranceLevel: "aal1" | "aal2" = "aal1";
+
+  const createAuthRequest = (token: string, currentLevel: "aal1" | "aal2" = "aal1"): Request => {
+    mockAssuranceLevel = currentLevel;
     return new Request("https://api.internal/test", {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -105,6 +108,7 @@ describe("Production-Ready Contact Messages Module — End-to-End Suite", () => 
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockAssuranceLevel = "aal1";
     mockAuditLogs = [];
     mockMessages = [
       {
@@ -280,6 +284,16 @@ describe("Production-Ready Contact Messages Module — End-to-End Suite", () => 
         getSession: vi.fn().mockResolvedValue({
           data: { session: { access_token: "mock-session-token" } },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockImplementation(async () => ({
+            data: {
+              currentLevel: mockAssuranceLevel,
+              nextLevel: "aal2",
+              currentAuthenticationMethods: [],
+            },
+            error: null,
+          })),
+        },
       },
     });
   });
@@ -558,7 +572,7 @@ describe("Production-Ready Contact Messages Module — End-to-End Suite", () => 
     });
 
     it("deletes a single message and records audit log", async () => {
-      const req = createAuthRequest(adminUuid);
+      const req = createAuthRequest(adminUuid, "aal2");
       const res = await deleteAdminContactMessageOperation(req, "msg-2", mockPrisma);
 
       expect(res.success).toBe(true);
@@ -603,7 +617,7 @@ describe("Production-Ready Contact Messages Module — End-to-End Suite", () => 
     });
 
     it("performs bulk deletion with maximum 100 IDs validation", async () => {
-      const req = createAuthRequest(adminUuid);
+      const req = createAuthRequest(adminUuid, "aal2");
 
       // Rejects empty array
       await expect(

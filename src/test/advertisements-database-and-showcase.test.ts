@@ -171,13 +171,19 @@ describe("Advertisements Database Operations & Showcase Integration", () => {
     created_at: new Date().toISOString(),
   };
 
-  function createAuthRequest(user: User | null): Request {
+  function createAuthRequest(user: User | null, currentLevel: "aal1" | "aal2" = "aal1"): Request {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user },
           error: user ? null : { message: "Invalid session" },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: user ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
 
@@ -586,7 +592,7 @@ describe("Advertisements Database Operations & Showcase Integration", () => {
         mockPrisma
       );
 
-      const deleteReq = createAuthRequest(adminUser);
+      const deleteReq = createAuthRequest(adminUser, "aal2");
       const res = await deleteAdminAdvertisementOperation(deleteReq, created.advertisement.id, mockPrisma);
 
       expect(res.success).toBe(true);
@@ -614,7 +620,7 @@ describe("Advertisements Database Operations & Showcase Integration", () => {
         mockPrisma
       );
 
-      const deleteMediaReq = createAuthRequest(adminUser);
+      const deleteMediaReq = createAuthRequest(adminUser, "aal2");
       await expect(
         deleteAdminMediaAssetOperation(deleteMediaReq, "media-ad-thumb-1", mockPrisma, {} as any)
       ).rejects.toThrow(/Referential Integrity Error: Cannot delete media asset.*because it is currently in use as thumbnail for Advertisement/i);
@@ -664,7 +670,7 @@ describe("Advertisements Database Operations & Showcase Integration", () => {
         mockPrisma
       );
 
-      const editorDeleteReq = createAuthRequest(editorUser);
+      const editorDeleteReq = createAuthRequest(editorUser, "aal2");
       await expect(
         deleteAdminAdvertisementOperation(editorDeleteReq, created.advertisement.id, mockPrisma)
       ).rejects.toThrow(/lacks required permission: "cms:delete"/i);

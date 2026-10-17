@@ -339,6 +339,12 @@ describe("Phase 1 — Contact Operations, Schema Alignment & Security Test Suite
       const mockSupabase = {
         auth: {
           getUser: vi.fn().mockResolvedValue({ data: { user: makeUser(editorUuid, "editor@cobralearn.com") }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+              data: { currentLevel: "aal2", nextLevel: "aal2", currentAuthenticationMethods: [] },
+              error: null,
+            }),
+          },
         },
       };
       (getSupabaseServerClient as any).mockReturnValue(mockSupabase);
@@ -567,6 +573,12 @@ describe("Phase 1 — Contact Operations, Schema Alignment & Security Test Suite
       const mockSupabase = {
         auth: {
           getUser: vi.fn().mockResolvedValue({ data: { user: makeUser(adminUuid, "admin@cobralearn.com") }, error: null }),
+          mfa: {
+            getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+              data: { currentLevel: "aal2", nextLevel: "aal2", currentAuthenticationMethods: [] },
+              error: null,
+            }),
+          },
         },
       };
       (getSupabaseServerClient as any).mockReturnValue(mockSupabase);

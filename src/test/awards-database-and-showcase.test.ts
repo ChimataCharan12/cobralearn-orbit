@@ -186,13 +186,19 @@ describe("Awards & Achievements Module Implementation and Integration Test Suite
     created_at: new Date().toISOString(),
   };
 
-  function createAuthRequest(user: User | null): Request {
+  function createAuthRequest(user: User | null, currentLevel: "aal1" | "aal2" = "aal1"): Request {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user },
           error: user ? null : { message: "Invalid session" },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: user ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
 
@@ -540,7 +546,7 @@ describe("Awards & Achievements Module Implementation and Integration Test Suite
     });
 
     it("deleteAdminAwardOperation deletes award but preserves referenced MediaAsset", async () => {
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
       const res = await deleteAdminAwardOperation(req, "award-initial-2", prisma);
       expect(res.success).toBe(true);
       expect(mockAwards.find((a) => a.id === "award-initial-2")).toBeUndefined();
@@ -630,7 +636,7 @@ describe("Awards & Achievements Module Implementation and Integration Test Suite
     });
 
     it("prevents deleting a MediaAsset still referenced by an award", async () => {
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
       await expect(
         deleteAdminMediaAssetOperation(req, "media-thumb-1", prisma, { from: () => ({ remove: vi.fn() }) } as any)
       ).rejects.toThrow(/Referential Integrity Error.*thumbnail for Award\(s\)/i);

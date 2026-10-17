@@ -1,6 +1,6 @@
 import type { PrismaClient, HomepageSection, MediaAsset } from "@prisma/client";
 import { AdminPermissions } from "@/lib/auth/rbac";
-import { requirePermission } from "@/lib/auth/server-auth";
+import { requirePermission, requireAal2Permission } from "@/lib/auth/server-auth";
 import { INITIAL_HOMEPAGE_SECTIONS } from "@/lib/homepage-data";
 
 let defaultPrisma: PrismaClient | null = null;
@@ -326,7 +326,7 @@ export async function deleteAdminHomepageSectionOperation(
   id: string,
   prismaClient?: PrismaClient
 ): Promise<{ deletedId: string }> {
-  const context = await requirePermission(request, AdminPermissions.CMS_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CMS_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   const coreIds = new Set(["sec-hero", "sec-featured", "sec-projects", "sec-cta"]);

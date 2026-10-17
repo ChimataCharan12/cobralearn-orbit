@@ -152,7 +152,7 @@ describe("Phase 7D — Admin Profile Management & Audit Logging Test Suite", () 
     };
   });
 
-  function setupAuthMock(user: User | null, error: Error | null = null) {
+  function setupAuthMock(user: User | null, error: Error | null = null, aal: string = "aal2") {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
@@ -163,6 +163,12 @@ describe("Phase 7D — Admin Profile Management & Audit Logging Test Suite", () 
           data: { session: user ? { user, access_token: "mock-token" } : null },
           error,
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: { currentLevel: aal, nextLevel: aal, currentAuthenticationMethods: [] },
+            error: null,
+          }),
+        },
       },
     });
   }

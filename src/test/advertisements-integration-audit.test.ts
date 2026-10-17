@@ -34,13 +34,19 @@ describe("Advertisements Public Integration Audit & Invariant Verification", () 
     created_at: new Date().toISOString(),
   };
 
-  function createAuthRequest(user: User | null): Request {
+  function createAuthRequest(user: User | null, currentLevel: "aal1" | "aal2" = "aal1"): Request {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user },
           error: user ? null : { message: "Invalid session" },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: user ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
 
@@ -315,7 +321,7 @@ describe("Advertisements Public Integration Audit & Invariant Verification", () 
     expect(item.image).not.toContain("placeholder");
 
     // Deletion protection for referenced asset
-    const req = createAuthRequest(adminUser);
+    const req = createAuthRequest(adminUser, "aal2");
     await expect(
       deleteAdminMediaAssetOperation(req, "media-ad-banner-1", prisma, { from: () => ({ remove: vi.fn() }) } as any)
     ).rejects.toThrow(/Referential Integrity Error.*thumbnail for Advertisement\(s\)/i);

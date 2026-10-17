@@ -183,13 +183,19 @@ describe("STEP 3: Websites Module Database & Public Showcase Integration Test Su
     created_at: new Date().toISOString(),
   };
 
-  function createAuthRequest(user: User | null): Request {
+  function createAuthRequest(user: User | null, currentLevel: "aal1" | "aal2" = "aal1"): Request {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user },
           error: user ? null : { message: "Invalid session" },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: user ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
 
@@ -914,7 +920,7 @@ describe("STEP 3: Websites Module Database & Public Showcase Integration Test Su
 
     it("deletes a website and logs audit trail while leaving media asset intact", async () => {
       const prisma = createMockPrisma();
-      const req = createAuthRequest(superAdminUser);
+      const req = createAuthRequest(superAdminUser, "aal2");
 
       const created = await createAdminWebsiteOperation(
         req,
@@ -1004,7 +1010,7 @@ describe("STEP 3: Websites Module Database & Public Showcase Integration Test Su
 
     it("allows EDITOR role to read, create, and update, but denies delete", async () => {
       const prisma = createMockPrisma();
-      const editorReq = createAuthRequest(editorUser);
+      const editorReq = createAuthRequest(editorUser, "aal2");
 
       // Editor can create
       const created = await createAdminWebsiteOperation(
@@ -1120,7 +1126,7 @@ describe("STEP 3: Websites Module Database & Public Showcase Integration Test Su
   describe("5. Shared-Media Referential Deletion Protection", () => {
     it("protects media from deletion when referenced as a website thumbnail", async () => {
       const prisma = createMockPrisma();
-      const adminReq = createAuthRequest(superAdminUser);
+      const adminReq = createAuthRequest(superAdminUser, "aal2");
 
       // Attach media-thumb-1 to a website
       await createAdminWebsiteOperation(

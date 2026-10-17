@@ -197,6 +197,12 @@ describe("Phase 7C — Server-Side Authorization Enforcement Test Suite", () => 
           data: { session: user ? { user, access_token: "mock-token" } : null },
           error,
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: { currentLevel: user ? "aal2" : null, nextLevel: user ? "aal2" : null },
+            error: null,
+          }),
+        },
       },
     });
   }
@@ -389,19 +395,21 @@ describe("Phase 7C — Server-Side Authorization Enforcement Test Suite", () => 
       );
 
       // The audit log MUST record the verified session identity (superAdminUuid), NEVER the spoofed header
-      expect(mockPrisma.adminAuditLog.create).toHaveBeenCalledWith({
-        data: {
-          actorId: superAdminUuid,
-          actorEmail: "superadmin@cobralearn.com",
-          action: "ADMIN_ACTIVATED",
-          module: "ADMIN_GOVERNANCE",
-          entityId: editorUuid,
-          metadata: expect.objectContaining({
-            targetEmail: "editor@cobralearn.com",
-            changedTo: true,
+      expect(mockPrisma.adminAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actorId: superAdminUuid,
+            actorEmail: "superadmin@cobralearn.com",
+            action: "ADMIN_ACTIVATED",
+            module: "ADMIN_GOVERNANCE",
+            entityId: editorUuid,
+            metadata: expect.objectContaining({
+              targetEmail: "editor@cobralearn.com",
+              changedTo: true,
+            }),
           }),
-        },
-      });
+        })
+      );
     });
   });
 

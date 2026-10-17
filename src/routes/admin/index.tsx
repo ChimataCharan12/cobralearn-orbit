@@ -3,9 +3,17 @@ import { useEffect } from "react";
 import { AdminBranding } from "@/components/AdminBranding";
 import { AdminLoginForm } from "@/components/AdminLoginForm";
 import { useAuth } from "@/lib/auth/use-auth";
+import { safeRedirect } from "@/lib/auth/safe-redirect";
 import environment from "@/assets/cobralearn-admin-environment.jpg";
 
+interface AdminIndexSearch {
+  next?: string | undefined;
+}
+
 export const Route = createFileRoute("/admin/")({
+  validateSearch: (search: Record<string, unknown>): AdminIndexSearch => ({
+    next: typeof search["next"] === "string" ? search["next"] : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Admin Sign In — CobraLearn Innotechcore" },
@@ -23,14 +31,40 @@ export const Route = createFileRoute("/admin/")({
 });
 
 function Index() {
-  const { isAuthenticated, isEligibleAdmin, isLoading, isEligibilityLoading } = useAuth();
+  const { isAuthenticated, isEligibleAdmin, isLoading, isEligibilityLoading, adminProfile } = useAuth();
   const navigate = useNavigate();
+
+  let searchNext: string | undefined;
+  try {
+    const search = Route.useSearch();
+    searchNext = search?.next;
+  } catch {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        searchNext = urlParams.get("next") || undefined;
+      } catch {}
+    }
+  }
 
   useEffect(() => {
     if (!isLoading && !isEligibilityLoading && isAuthenticated && isEligibleAdmin) {
-      navigate({ to: "/admin/dashboard" });
+      if (adminProfile?.mfaRecoveryPending) {
+        navigate({ to: "/admin/mfa-recovery" });
+      } else {
+        const destination = safeRedirect(searchNext, "/admin/dashboard");
+        navigate({ to: destination as any });
+      }
     }
-  }, [isAuthenticated, isEligibleAdmin, isLoading, isEligibilityLoading, navigate]);
+  }, [
+    isAuthenticated,
+    isEligibleAdmin,
+    isLoading,
+    isEligibilityLoading,
+    adminProfile?.mfaRecoveryPending,
+    navigate,
+    searchNext,
+  ]);
   return (
     <main className="relative min-h-screen lg:h-dvh lg:min-h-0 lg:max-h-dvh lg:overflow-hidden w-full overflow-x-hidden bg-[#020604] flex items-center justify-center select-none">
       {/* Pure Scenery Environment Background Plate */}

@@ -15,7 +15,15 @@ interface AdminPortalBoundaryProps {
  * server-side administrator eligibility is confirmed.
  */
 export function AdminPortalBoundary({ children }: AdminPortalBoundaryProps) {
-  const { isAuthenticated, isEligibleAdmin, isLoading, isEligibilityLoading } = useAuth();
+  const {
+    isAuthenticated,
+    isEligibleAdmin,
+    isMfaRequired,
+    isLoading,
+    isEligibilityLoading,
+    isMfaLoading,
+    adminProfile,
+  } = useAuth();
   const router = useRouter();
   const navigate = useNavigate();
 
@@ -29,10 +37,15 @@ export function AdminPortalBoundary({ children }: AdminPortalBoundaryProps) {
 
   useEffect(() => {
     if (!isProtectedAdminRoute) return;
-    if (isLoading || isEligibilityLoading) return;
+    if (isLoading || isEligibilityLoading || isMfaLoading) return;
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated || isMfaRequired) {
       navigate({ to: "/admin" });
+      return;
+    }
+
+    if (adminProfile?.mfaRecoveryPending) {
+      navigate({ to: "/admin/mfa-recovery" });
       return;
     }
 
@@ -44,8 +57,11 @@ export function AdminPortalBoundary({ children }: AdminPortalBoundaryProps) {
     isProtectedAdminRoute,
     isLoading,
     isEligibilityLoading,
+    isMfaLoading,
     isAuthenticated,
+    isMfaRequired,
     isEligibleAdmin,
+    adminProfile?.mfaRecoveryPending,
     navigate,
   ]);
 
@@ -55,7 +71,7 @@ export function AdminPortalBoundary({ children }: AdminPortalBoundaryProps) {
   }
 
   // 1. While establishing session or validating server-side administrator eligibility
-  if (isLoading || isEligibilityLoading) {
+  if (isLoading || isEligibilityLoading || isMfaLoading) {
     return (
       <div className="dash-bg flex min-h-screen w-full items-center justify-center select-none">
         <div className="flex items-center gap-3 rounded-xl border border-[#00ff87]/30 bg-[#040e08]/90 px-6 py-3.5 text-xs text-[#00ff87] shadow-[0_0_25px_rgba(0,255,135,0.25)] backdrop-blur-xl">
@@ -70,7 +86,7 @@ export function AdminPortalBoundary({ children }: AdminPortalBoundaryProps) {
 
   // 2. If unauthenticated or ineligible on a protected portal route:
   // Render nothing while navigation completes to guarantee zero content-flash
-  if (!isAuthenticated || !isEligibleAdmin) {
+  if (!isAuthenticated || !isEligibleAdmin || isMfaRequired || adminProfile?.mfaRecoveryPending) {
     return null;
   }
 

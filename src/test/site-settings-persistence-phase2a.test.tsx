@@ -157,6 +157,12 @@ describe("Phase 2A: Site Settings Persistence & Authorization Integration", () =
       getSession: vi.fn().mockResolvedValue({
         data: { session: user ? { access_token: "mock-token", user } : null },
       }),
+      mfa: {
+        getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+          data: { currentLevel: user ? "aal2" : null, nextLevel: user ? "aal2" : null },
+          error: null,
+        }),
+      },
     };
     (getSupabaseServerClient as any).mockReturnValue({ auth: mockAuth });
   }

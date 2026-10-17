@@ -143,7 +143,7 @@ export function formatFullTimestamp(date: Date): string {
 /**
  * Humanizes audit log action codes into clean UI labels.
  */
-function humanizeAction(action: string): string {
+export function humanizeAction(action: string): string {
   const map: Record<string, string> = {
     PROJECT_CREATE: "Project Created",
     PROJECT_UPDATE: "Project Updated",
@@ -166,6 +166,16 @@ function humanizeAction(action: string): string {
     PASSWORD_CHANGE: "Password Changed",
     ADMIN_STATUS_UPDATE: "Admin Status Changed",
     ROLE_ASSIGN: "Role Reassigned",
+    "auth:password_changed": "Password Changed",
+    "auth:password_reset_requested": "Password Reset Requested",
+    "auth:password_reset_completed": "Password Reset Completed",
+    "auth:password_reset_completion_failed": "Password Reset Completion Failed",
+    "auth:recovery_codes_generated": "Recovery Codes Generated",
+    "auth:recovery_code_redeemed": "Recovery Code Redeemed",
+    "auth:recovery_code_redeem_failed": "Recovery Code Redemption Failed",
+    "auth:recovery_code_throttled": "Recovery Code Throttled",
+    "auth:login_throttled": "Login Throttled",
+    "auth:recovery_throttled": "Recovery Throttled",
   };
 
   if (map[action]) return map[action];

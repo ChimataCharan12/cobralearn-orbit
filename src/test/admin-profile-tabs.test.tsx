@@ -579,14 +579,11 @@ describe("Admin Profile UI — Security, Preferences & Activity/Sessions Tabs", 
   // 7. ChangePasswordForm — Current Password Re-Authentication (SEC-03)
   describe("ChangePasswordForm", () => {
     it("validates current password before attempting password update and blocks update if invalid", async () => {
-      const verifySpy = vi.spyOn(authService, "verifyCurrentPassword").mockResolvedValue({
-        data: null as any,
-        error: new Error("Invalid login credentials"),
+      const changePasswordSpy = vi.spyOn(adminClient, "changePassword").mockResolvedValue({
+        success: false,
+        error: "Invalid login credentials",
       });
-      const updateSpy = vi.spyOn(authService, "updatePassword").mockResolvedValue({
-        data: {} as any,
-        error: null,
-      });
+      const signOutSpy = vi.spyOn(authService, "signOut").mockResolvedValue({ data: null, error: null });
 
       render(<ChangePasswordForm />);
 
@@ -605,21 +602,20 @@ describe("Admin Profile UI — Security, Preferences & Activity/Sessions Tabs", 
       fireEvent.click(submitBtn);
 
       await waitFor(() => {
-        expect(verifySpy).toHaveBeenCalledWith("WrongCurrentPassword");
-        expect(updateSpy).not.toHaveBeenCalled();
+        expect(changePasswordSpy).toHaveBeenCalledWith({
+          currentPassword: "WrongCurrentPassword",
+          newPassword: "NewSecurePass123!",
+        });
+        expect(signOutSpy).not.toHaveBeenCalled();
         expect(screen.getByText("Invalid login credentials")).toBeDefined();
       });
     });
 
     it("successfully calls updatePassword and navigates when current password is verified", async () => {
-      const verifySpy = vi.spyOn(authService, "verifyCurrentPassword").mockResolvedValue({
-        data: { user: { id: "user-123" } } as any,
-        error: null,
+      const changePasswordSpy = vi.spyOn(adminClient, "changePassword").mockResolvedValue({
+        success: true,
       });
-      const updateSpy = vi.spyOn(authService, "updatePassword").mockResolvedValue({
-        data: { user: { id: "user-123" } } as any,
-        error: null,
-      });
+      const signOutSpy = vi.spyOn(authService, "signOut").mockResolvedValue({ data: null, error: null });
 
       render(<ChangePasswordForm />);
 
@@ -637,8 +633,11 @@ describe("Admin Profile UI — Security, Preferences & Activity/Sessions Tabs", 
       fireEvent.click(submitBtn);
 
       await waitFor(() => {
-        expect(verifySpy).toHaveBeenCalledWith("CorrectCurrentPass123!");
-        expect(updateSpy).toHaveBeenCalledWith("NewSecurePass123!");
+        expect(changePasswordSpy).toHaveBeenCalledWith({
+          currentPassword: "CorrectCurrentPass123!",
+          newPassword: "NewSecurePass123!",
+        });
+        expect(signOutSpy).toHaveBeenCalled();
         expect(mockNavigate).toHaveBeenCalledWith({ to: "/admin/password-updated" });
       });
     });

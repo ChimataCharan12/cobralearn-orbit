@@ -1,6 +1,6 @@
 import type { PrismaClient, Website, PublishStatus, MediaAsset } from "@prisma/client";
 import { AdminPermissions } from "@/lib/auth/rbac";
-import { requirePermission } from "@/lib/auth/server-auth";
+import { requirePermission, requireAal2Permission } from "@/lib/auth/server-auth";
 import { createNotificationEvent } from "./notification-operations";
 
 let defaultPrisma: PrismaClient | null = null;
@@ -686,7 +686,7 @@ export async function deleteAdminWebsiteOperation(
   id: string,
   prismaClient?: PrismaClient
 ): Promise<{ success: boolean; deletedId: string }> {
-  const context = await requirePermission(request, AdminPermissions.CMS_DELETE, prismaClient);
+  const context = await requireAal2Permission(request, AdminPermissions.CMS_DELETE, prismaClient);
   const prisma = prismaClient || (await getPrisma());
 
   const website = await prisma.website.findUnique({

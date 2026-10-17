@@ -33,6 +33,18 @@ import {
   getSelfLoginHistoryServerFn,
 } from "@/lib/server/profile-server-fns";
 import {
+  emergencyMfaResetServerFn,
+  completeMfaReenrollmentServerFn,
+  reconcileMfaRecoveryServerFn,
+  getMfaRecoveryStatusServerFn,
+} from "@/lib/server/mfa-recovery-server-fns";
+import type {
+  EmergencyMfaResetResult,
+  CompleteMfaReenrollmentResult,
+  ReconcileMfaRecoveryResult,
+} from "@/lib/server/admin-operations";
+import type { AdminMfaRecovery } from "@/lib/auth/mfa-recovery-types";
+import {
   getSelfNotificationsServerFn,
   markNotificationReadServerFn,
   markAllNotificationsReadServerFn,
@@ -207,7 +219,32 @@ import {
 import {
   evaluateLoginRateLimitServerFn,
   requestPasswordResetServerFn,
+  recordPasswordResetCompletionServerFn,
+  changeAdminPasswordServerFn,
 } from "@/lib/server/auth-rate-limit-server-fns";
+import type {
+  ChangeAdminPasswordPayload,
+  ChangeAdminPasswordResult,
+} from "@/lib/server/auth-rate-limit-operations";
+export type {
+  ChangeAdminPasswordPayload,
+  ChangeAdminPasswordResult,
+};
+import {
+  generateRecoveryCodesServerFn,
+  getRecoveryCodeStatusServerFn,
+  verifyAndRedeemRecoveryCodeServerFn,
+} from "@/lib/server/recovery-code-server-fns";
+import type {
+  GenerateRecoveryCodesResult,
+  RecoveryCodeStatusResult,
+  VerifyRecoveryCodeResult,
+} from "@/lib/server/recovery-code-operations";
+export type {
+  GenerateRecoveryCodesResult,
+  RecoveryCodeStatusResult,
+  VerifyRecoveryCodeResult,
+};
 import { handleAuthError } from "@/lib/auth/auth-error-handling";
 
 export interface ApiResponse<T> {
@@ -309,18 +346,24 @@ export const adminClient = {
     options?: { peek?: boolean }
   ): Promise<ApiResponse<{ allowed: boolean; message?: string; retryAfterSeconds?: number }>> {
     try {
-      if (process.env.VITEST && !process.env.TEST_WITH_SERVER) {
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
         const { evaluateLoginRateLimitOperation } = await import("@/lib/server/auth-rate-limit-operations");
         const req = new Request("https://api.internal/auth/rate-limit/login", {
           method: "POST",
           headers: { "x-real-ip": "127.0.0.1" },
         });
-        const result = await evaluateLoginRateLimitOperation(req, { email, peek: options?.peek });
+        const result = await evaluateLoginRateLimitOperation(req, {
+          email,
+          ...(options?.peek !== undefined ? { peek: options.peek } : {}),
+        });
         return { success: true, data: result };
       }
 
       const result = await evaluateLoginRateLimitServerFn({
-        data: { email, peek: options?.peek },
+        data: {
+          email,
+          ...(options?.peek !== undefined ? { peek: options.peek } : {}),
+        },
         fetch: rpcFetchFallback as any,
       });
       return { success: true, data: result };
@@ -344,18 +387,24 @@ export const adminClient = {
    */
   async requestPasswordReset(email: string, redirectTo?: string): Promise<ApiResponse<{ message: string }>> {
     try {
-      if (process.env.VITEST && !process.env.TEST_WITH_SERVER) {
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
         const { requestPasswordResetOperation } = await import("@/lib/server/auth-rate-limit-operations");
         const req = new Request("https://api.internal/auth/rate-limit/recovery", {
           method: "POST",
           headers: { "x-real-ip": "127.0.0.1" },
         });
-        const result = await requestPasswordResetOperation(req, { email, redirectTo });
+        const result = await requestPasswordResetOperation(req, {
+          email,
+          ...(redirectTo ? { redirectTo } : {}),
+        });
         return { success: true, data: result };
       }
 
       const result = await requestPasswordResetServerFn({
-        data: { email, redirectTo },
+        data: {
+          email,
+          ...(redirectTo ? { redirectTo } : {}),
+        },
         fetch: rpcFetchFallback as any,
       });
       return { success: true, data: result };
@@ -366,11 +415,92 @@ export const adminClient = {
   },
 
   /**
-   * Loads the verified AdminProfile for the authenticated session.
+   * Authoritatively records password reset completion in AdminAuditLog on the server.
    */
-  async getSelfProfile(): Promise<ApiResponse<AdminProfile>> {
+  async recordPasswordResetCompletion(accessToken: string, newPassword?: string): Promise<ApiResponse<{ success: boolean }>> {
+    try {
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
+        const { recordPasswordResetCompletionOperation } = await import("@/lib/server/auth-rate-limit-operations");
+        const req = new Request("https://api.internal/auth/rate-limit/reset-completion", {
+          method: "POST",
+          headers: { "x-real-ip": "127.0.0.1" },
+        });
+        const result = await recordPasswordResetCompletionOperation(req, {
+          accessToken,
+          ...(newPassword ? { newPassword } : {}),
+        });
+        if (!result.success) {
+          return { success: false, error: result.message || "Failed to record password reset completion" };
+        }
+        return { success: true, data: result };
+      }
+
+      const result = await recordPasswordResetCompletionServerFn({
+        data: {
+          accessToken,
+          ...(newPassword ? { newPassword } : {}),
+        },
+        fetch: rpcFetchFallback as any,
+      });
+      if (!result.success) {
+        return { success: false, error: result.message || "Failed to record password reset completion" };
+      }
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Failed to record password reset completion");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Phase 6.2: Authoritative administrator password change.
+   * Requires AAL2 active session, validates current password safely, updates password,
+   * performs global session revocation, and audits outcome.
+   */
+  async changePassword(payload: { currentPassword: string; newPassword: string }): Promise<ApiResponse<ChangeAdminPasswordResult>> {
     try {
       const authToken = await getAuthToken();
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
+        const { changeAdminPasswordOperation } = await import("@/lib/server/auth-rate-limit-operations");
+        const headers: Record<string, string> = { "x-real-ip": "127.0.0.1" };
+        if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+        const req = new Request("https://api.internal/auth/change-password", {
+          method: "POST",
+          headers,
+        });
+        const result = await changeAdminPasswordOperation(req, {
+          ...payload,
+          ...(authToken ? { authToken } : {}),
+        });
+        if (result.success) {
+          return { success: true, data: result };
+        }
+        return { success: false, data: result, error: result.message || "Failed to change password" };
+      }
+
+      const result = await changeAdminPasswordServerFn({
+        data: {
+          ...payload,
+          ...(authToken ? { authToken } : {}),
+        },
+        fetch: rpcFetchFallback as any,
+      });
+      if (result.success) {
+        return { success: true, data: result };
+      }
+      return { success: false, data: result, error: result.message || "Failed to change password" };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Failed to change password");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Loads the verified AdminProfile for the authenticated session.
+   */
+  async getSelfProfile(explicitAuthToken?: string): Promise<ApiResponse<AdminProfile>> {
+    try {
+      const authToken = explicitAuthToken || (await getAuthToken());
       const result = await getSelfProfileServerFn({
         data: {
           authToken,
@@ -499,6 +629,137 @@ export const adminClient = {
   },
 
   /**
+   * Track A: Web Portal Peer Emergency MFA Reset.
+   * Requires SUPER_ADMIN at AAL2. Target must be ADMIN or EDITOR.
+   */
+  async emergencyMfaReset(
+    targetId: string,
+    expectedEmail: string,
+    justification: string
+  ): Promise<ApiResponse<EmergencyMfaResetResult>> {
+    try {
+      const authToken = await getAuthToken();
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
+        const { emergencyMfaResetOperation } = await import("@/lib/server/admin-operations");
+        const req = new Request("https://api.internal/admin/mfa/emergency-reset", {
+          method: "POST",
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        });
+        const result = await emergencyMfaResetOperation(req, { targetId, expectedEmail, justification });
+        return { success: true, data: result };
+      }
+
+      const result = await emergencyMfaResetServerFn({
+        data: {
+          payload: { targetId, expectedEmail, justification },
+          ...(authToken ? { authToken } : {}),
+        },
+      });
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Emergency MFA reset failed");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Phase 4: Completes independently verified MFA re-enrollment for a quarantined administrator.
+   */
+  async completeMfaReenrollment(): Promise<ApiResponse<CompleteMfaReenrollmentResult>> {
+    try {
+      const authToken = await getAuthToken();
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
+        const { completeMfaReenrollmentOperation } = await import("@/lib/server/admin-operations");
+        const req = new Request("https://api.internal/admin/mfa/complete-reenrollment", {
+          method: "POST",
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        });
+        const result = await completeMfaReenrollmentOperation(req);
+        return { success: true, data: result };
+      }
+
+      const result = await completeMfaReenrollmentServerFn({
+        data: {
+          ...(authToken ? { authToken } : {}),
+        },
+      });
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "MFA re-enrollment verification failed");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Phase 5: Reconciles an emergency recovery operation.
+   */
+  async reconcileMfaRecovery(
+    recoveryId: string,
+    notes?: string
+  ): Promise<ApiResponse<ReconcileMfaRecoveryResult>> {
+    try {
+      const authToken = await getAuthToken();
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
+        const { reconcileMfaRecoveryOperation } = await import("@/lib/server/admin-operations");
+        const req = new Request("https://api.internal/admin/mfa/reconcile", {
+          method: "POST",
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        });
+        const result = await reconcileMfaRecoveryOperation(req, {
+          recoveryId,
+          ...(notes ? { notes } : {}),
+        });
+        return { success: true, data: result };
+      }
+
+      const result = await reconcileMfaRecoveryServerFn({
+        data: {
+          payload: {
+            recoveryId,
+            ...(notes ? { notes } : {}),
+          },
+          ...(authToken ? { authToken } : {}),
+        },
+      });
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "MFA recovery reconciliation failed");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Retrieves the current recovery status.
+   */
+  async getMfaRecoveryStatus(
+    targetId?: string
+  ): Promise<ApiResponse<{ pending: boolean; recovery: AdminMfaRecovery | null }>> {
+    try {
+      const authToken = await getAuthToken();
+      if (process.env["VITEST"] && !process.env["TEST_WITH_SERVER"]) {
+        const { getMfaRecoveryStatusOperation } = await import("@/lib/server/admin-operations");
+        const req = new Request("https://api.internal/admin/mfa/recovery-status", {
+          method: "GET",
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        });
+        const result = await getMfaRecoveryStatusOperation(req, targetId);
+        return { success: true, data: result };
+      }
+
+      const result = await getMfaRecoveryStatusServerFn({
+        data: {
+          ...(targetId ? { targetId } : {}),
+          ...(authToken ? { authToken } : {}),
+        },
+      });
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Failed to retrieve MFA recovery status");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
    * Retrieves administrative audit logs (Requires AUDIT_LOG_READ).
    */
   async getAuditLogs(pagination?: { limit?: number; offset?: number }): Promise<ApiResponse<{ logs: AdminAuditLog[]; count: number }>> {
@@ -506,9 +767,9 @@ export const adminClient = {
       const authToken = await getAuthToken();
       const result = await getAuditLogsServerFn({
         data: {
-          limit: pagination?.limit,
-          offset: pagination?.offset,
-          authToken,
+          ...(pagination?.limit !== undefined ? { limit: pagination.limit } : {}),
+          ...(pagination?.offset !== undefined ? { offset: pagination.offset } : {}),
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
@@ -527,9 +788,9 @@ export const adminClient = {
       const authToken = await getAuthToken();
       const result = await getSelfAuditLogsServerFn({
         data: {
-          limit: pagination?.limit,
-          offset: pagination?.offset,
-          authToken,
+          ...(pagination?.limit !== undefined ? { limit: pagination.limit } : {}),
+          ...(pagination?.offset !== undefined ? { offset: pagination.offset } : {}),
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
@@ -563,9 +824,9 @@ export const adminClient = {
       const authToken = await getAuthToken();
       const result = await getSelfLoginHistoryServerFn({
         data: {
-          page: pagination?.page,
-          limit: pagination?.limit,
-          authToken,
+          ...(pagination?.page !== undefined ? { page: pagination.page } : {}),
+          ...(pagination?.limit !== undefined ? { limit: pagination.limit } : {}),
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
@@ -587,10 +848,10 @@ export const adminClient = {
       const authToken = await getAuthToken();
       const result = await getSelfNotificationsServerFn({
         data: {
-          limit: options?.limit,
-          unreadOnly: options?.unreadOnly,
-          category: options?.category,
-          authToken,
+          ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+          ...(options?.unreadOnly !== undefined ? { unreadOnly: options.unreadOnly } : {}),
+          ...(options?.category ? { category: options.category } : {}),
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
@@ -609,7 +870,7 @@ export const adminClient = {
       const result = await markNotificationReadServerFn({
         data: {
           notificationId,
-          authToken,
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
@@ -627,7 +888,7 @@ export const adminClient = {
       const authToken = await getAuthToken();
       const result = await markAllNotificationsReadServerFn({
         data: {
-          authToken,
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
@@ -2035,12 +2296,67 @@ export const adminClient = {
       const result = await searchGlobalAdminServerFn({
         data: {
           query,
-          authToken,
+          ...(authToken ? { authToken } : {}),
+        },
+      });
+      return { success: true, data: result as GlobalSearchResponse };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Failed to perform global search");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Generates a fresh set of 8 single-use recovery codes.
+   * Requires verified AAL2 elevation.
+   */
+  async generateRecoveryCodes(): Promise<ApiResponse<GenerateRecoveryCodesResult>> {
+    try {
+      const authToken = await getAuthToken();
+      const result = await generateRecoveryCodesServerFn({
+        data: {
+          ...(authToken ? { authToken } : {}),
         },
       });
       return { success: true, data: result };
     } catch (err: unknown) {
-      const message = formatClientErrorMessage(err, "Failed to perform global search");
+      const message = formatClientErrorMessage(err, "Failed to generate recovery codes");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Retrieves non-sensitive recovery code counts.
+   */
+  async getRecoveryCodeStatus(): Promise<ApiResponse<RecoveryCodeStatusResult>> {
+    try {
+      const authToken = await getAuthToken();
+      const result = await getRecoveryCodeStatusServerFn({
+        data: {
+          ...(authToken ? { authToken } : {}),
+        },
+      });
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Failed to retrieve recovery code status");
+      return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Verifies and redeems a single-use recovery code.
+   */
+  async verifyAndRedeemRecoveryCode(
+    adminId: string,
+    code: string
+  ): Promise<ApiResponse<VerifyRecoveryCodeResult>> {
+    try {
+      const result = await verifyAndRedeemRecoveryCodeServerFn({
+        data: { adminId, code },
+      });
+      return { success: true, data: result };
+    } catch (err: unknown) {
+      const message = formatClientErrorMessage(err, "Failed to verify recovery code");
       return { success: false, error: message };
     }
   },

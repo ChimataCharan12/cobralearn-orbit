@@ -19,19 +19,14 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/use-auth";
 import { SignOutModal } from "@/components/modals/SignOutModal";
+import { MfaEnrollmentCard } from "@/components/profile/MfaEnrollmentCard";
+import { RecoveryCodesCard } from "@/components/profile/RecoveryCodesCard";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 function getClientDeviceInfo(): {
   browser: string;
@@ -119,8 +114,6 @@ export function SecurityTab() {
   const navigate = useNavigate();
   const { user, session, isAuthenticated, isLoading: authLoading, signOut } = useAuth();
 
-  // MFA Info Modal state
-  const [mfaModalOpen, setMfaModalOpen] = useState(false);
   const [signOutModalOpen, setSignOutModalOpen] = useState(false);
 
   const deviceInfo = getClientDeviceInfo();
@@ -202,47 +195,12 @@ export function SecurityTab() {
       </div>
 
       {/* 2. MULTI-FACTOR AUTHENTICATION (MFA) CARD */}
-      <div className="card-interactive rounded-xl border border-brand/20 bg-panel/85 p-5 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 border border-brand/20 text-brand-bright">
-            <Shield className="size-5" />
-          </div>
-          <div>
-            <h3 className="font-display text-[15px] font-bold text-foreground text-glow">Multi-Factor Authentication (MFA)</h3>
-            <p className="text-[12px] text-muted-foreground">Add an extra layer of security to your administrative account.</p>
-          </div>
-        </div>
+      <MfaEnrollmentCard />
 
-        {/* Inner Status Box */}
-        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-brand/15 bg-background/50 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              <ShieldAlert className="size-4" />
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">MFA Status</p>
-              <div className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
-                <p className="text-[13px] font-semibold text-foreground">Managed by Auth Provider</p>
-              </div>
-            </div>
-          </div>
+      {/* 3. SINGLE-USE RECOVERY CODES CARD */}
+      <RecoveryCodesCard />
 
-          <button
-            type="button"
-            onClick={() => setMfaModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-brand/30 bg-background/60 px-4 py-2 text-[12.5px] font-medium text-foreground transition hover:border-brand-bright/50 hover:bg-brand/10 hover:text-brand-bright cursor-pointer"
-          >
-            <span>MFA Details</span>
-          </button>
-        </div>
-
-        <p className="mt-3 text-[11.5px] text-muted-foreground">
-          Multi-factor authentication enforcement is governed by upstream organization identity policy. Self-service MFA enrollment is currently unavailable in this portal.
-        </p>
-      </div>
-
-      {/* 3. CONNECTED DEVICES / SESSIONS CARD */}
+      {/* 4. CONNECTED DEVICES / SESSIONS CARD */}
       <div className="card-interactive rounded-xl border border-brand/20 bg-panel/85 p-5 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 border border-brand/20 text-brand-bright">
@@ -372,50 +330,6 @@ export function SecurityTab() {
           </div>
         </div>
       </div>
-
-      {/* MFA Info Modal */}
-      <Dialog open={mfaModalOpen} onOpenChange={setMfaModalOpen}>
-        <DialogContent className="border border-brand/30 bg-[#040e08]/95 p-6 backdrop-blur-2xl text-foreground max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle className="font-display text-[18px] font-bold text-foreground text-glow flex items-center gap-2">
-              <Shield className="size-5 text-brand-bright" />
-              Multi-Factor Authentication
-            </DialogTitle>
-            <DialogDescription className="text-[12.5px] text-muted-foreground pt-1">
-              Multi-factor authentication status and organizational policy.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 pt-3 text-[12.5px]">
-            <div className="rounded-lg border border-brand/20 bg-background/60 p-3.5">
-              <p className="font-semibold text-foreground">Provider Policy</p>
-              <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                MFA is configured directly through your Supabase Auth / OAuth identity provider.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-brand/20 bg-background/60 p-3.5">
-              <p className="font-semibold text-foreground">Self-Service Enrollment</p>
-              <div className="mt-1 flex items-start gap-2 text-amber-400 text-[11.5px]">
-                <Info className="size-4 shrink-0 mt-0.5" />
-                <span>
-                  Self-service in-portal MFA enrollment is not configured for this administrative tier. Contact your organization administrator to require TOTP.
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setMfaModalOpen(false)}
-                className="rounded-lg border border-brand/25 bg-background/60 px-4 py-2 text-[12.5px] font-medium text-foreground transition hover:bg-background/90 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Real Sign Out Confirmation Modal */}
       <SignOutModal

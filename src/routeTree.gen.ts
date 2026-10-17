@@ -21,7 +21,9 @@ import { Route as AdminContactRouteImport } from './routes/admin/contact'
 import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
 import { Route as AdminForgotPasswordRouteImport } from './routes/admin/forgot-password'
 import { Route as AdminHomepageRouteImport } from './routes/admin/homepage'
+import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminMediaRouteImport } from './routes/admin/media'
+import { Route as AdminMfaRecoveryRouteImport } from './routes/admin/mfa-recovery'
 import { Route as AdminNavigationRouteImport } from './routes/admin/navigation'
 import { Route as AdminNotificationsRouteImport } from './routes/admin/notifications'
 import { Route as AdminPasswordUpdatedRouteImport } from './routes/admin/password-updated'
@@ -113,9 +115,19 @@ const AdminHomepageRoute = AdminHomepageRouteImport.update({
   path: '/admin/homepage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminMediaRoute = AdminMediaRouteImport.update({
   id: '/admin/media',
   path: '/admin/media',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMfaRecoveryRoute = AdminMfaRecoveryRouteImport.update({
+  id: '/admin/mfa-recovery',
+  path: '/admin/mfa-recovery',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminNavigationRoute = AdminNavigationRouteImport.update({
@@ -284,7 +296,9 @@ export interface FileRoutesByFullPath {
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/forgot-password': typeof AdminForgotPasswordRoute
   '/admin/homepage': typeof AdminHomepageRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/media': typeof AdminMediaRoute
+  '/admin/mfa-recovery': typeof AdminMfaRecoveryRoute
   '/admin/navigation': typeof AdminNavigationRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/password-updated': typeof AdminPasswordUpdatedRoute
@@ -326,7 +340,9 @@ export interface FileRoutesByTo {
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/forgot-password': typeof AdminForgotPasswordRoute
   '/admin/homepage': typeof AdminHomepageRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/media': typeof AdminMediaRoute
+  '/admin/mfa-recovery': typeof AdminMfaRecoveryRoute
   '/admin/navigation': typeof AdminNavigationRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/password-updated': typeof AdminPasswordUpdatedRoute
@@ -369,7 +385,9 @@ export interface FileRoutesById {
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/forgot-password': typeof AdminForgotPasswordRoute
   '/admin/homepage': typeof AdminHomepageRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/media': typeof AdminMediaRoute
+  '/admin/mfa-recovery': typeof AdminMfaRecoveryRoute
   '/admin/navigation': typeof AdminNavigationRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/password-updated': typeof AdminPasswordUpdatedRoute
@@ -416,7 +434,9 @@ export interface FileRouteTypes {
     | '/admin/dashboard'
     | '/admin/forgot-password'
     | '/admin/homepage'
+    | '/admin/login'
     | '/admin/media'
+    | '/admin/mfa-recovery'
     | '/admin/navigation'
     | '/admin/notifications'
     | '/admin/password-updated'
@@ -458,7 +478,9 @@ export interface FileRouteTypes {
     | '/admin/dashboard'
     | '/admin/forgot-password'
     | '/admin/homepage'
+    | '/admin/login'
     | '/admin/media'
+    | '/admin/mfa-recovery'
     | '/admin/navigation'
     | '/admin/notifications'
     | '/admin/password-updated'
@@ -500,7 +522,9 @@ export interface FileRouteTypes {
     | '/admin/dashboard'
     | '/admin/forgot-password'
     | '/admin/homepage'
+    | '/admin/login'
     | '/admin/media'
+    | '/admin/mfa-recovery'
     | '/admin/navigation'
     | '/admin/notifications'
     | '/admin/password-updated'
@@ -546,7 +570,9 @@ export interface RootRouteChildren {
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminForgotPasswordRoute: typeof AdminForgotPasswordRoute
   AdminHomepageRoute: typeof AdminHomepageRoute
+  AdminLoginRoute: typeof AdminLoginRoute
   AdminMediaRoute: typeof AdminMediaRoute
+  AdminMfaRecoveryRoute: typeof AdminMfaRecoveryRoute
   AdminNavigationRoute: typeof AdminNavigationRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
   AdminPasswordUpdatedRoute: typeof AdminPasswordUpdatedRoute
@@ -650,11 +676,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminHomepageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/media': {
       id: '/admin/media'
       path: '/admin/media'
       fullPath: '/admin/media'
       preLoaderRoute: typeof AdminMediaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/mfa-recovery': {
+      id: '/admin/mfa-recovery'
+      path: '/admin/mfa-recovery'
+      fullPath: '/admin/mfa-recovery'
+      preLoaderRoute: typeof AdminMfaRecoveryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/navigation': {
@@ -973,7 +1013,9 @@ const rootRouteChildren: RootRouteChildren = {
   AdminDashboardRoute: AdminDashboardRoute,
   AdminForgotPasswordRoute: AdminForgotPasswordRoute,
   AdminHomepageRoute: AdminHomepageRoute,
+  AdminLoginRoute: AdminLoginRoute,
   AdminMediaRoute: AdminMediaRoute,
+  AdminMfaRecoveryRoute: AdminMfaRecoveryRoute,
   AdminNavigationRoute: AdminNavigationRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminPasswordUpdatedRoute: AdminPasswordUpdatedRoute,

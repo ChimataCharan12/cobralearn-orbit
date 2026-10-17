@@ -98,6 +98,12 @@ describe("Phase 1.1: Security Hardening & Strict Validation Test Suite", () => {
       getSession: vi.fn().mockResolvedValue({
         data: { session: user ? { access_token: "valid-test-token", user } : null },
       }),
+      mfa: {
+        getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+          data: { currentLevel: user ? "aal2" : null, nextLevel: user ? "aal2" : null },
+          error: null,
+        }),
+      },
     };
     (getSupabaseServerClient as any).mockReturnValue({ auth: mockAuth });
   }

@@ -11,20 +11,24 @@ import emblem from "@/assets/cobralearn-emblem.png";
 
 interface CallbackSearch {
   code?: string | undefined;
+  token_hash?: string | undefined;
   type?: string | undefined;
   next?: string | undefined;
   error?: string | undefined;
   error_description?: string | undefined;
+  error_code?: string | undefined;
 }
 
 export const Route = createFileRoute("/auth/callback")({
   validateSearch: (search: Record<string, unknown>): CallbackSearch => {
     return {
       code: typeof search["code"] === "string" ? search["code"] : undefined,
+      token_hash: typeof search["token_hash"] === "string" ? search["token_hash"] : undefined,
       type: typeof search["type"] === "string" ? search["type"] : undefined,
       next: typeof search["next"] === "string" ? search["next"] : undefined,
       error: typeof search["error"] === "string" ? search["error"] : undefined,
       error_description: typeof search["error_description"] === "string" ? search["error_description"] : undefined,
+      error_code: typeof search["error_code"] === "string" ? search["error_code"] : undefined,
     };
   },
   head: () => ({
@@ -47,17 +51,54 @@ function AuthCallbackPage() {
 
     async function handleCallback() {
       try {
-        // 1. If error query parameters exist
-        if (search.error || search.error_description) {
+        // 1. Inspect URL hash parameters if present (implicit grant, recovery hash, or hash errors)
+        let hashParams: URLSearchParams | null = null;
+        if (typeof window !== "undefined" && window.location.hash) {
+          try {
+            const rawHash = window.location.hash.startsWith("#")
+              ? window.location.hash.substring(1)
+              : window.location.hash;
+            hashParams = new URLSearchParams(rawHash);
+          } catch {
+            // Malformed hash fallback
+          }
+        }
+
+        const hashError = hashParams?.get("error");
+        const hashErrorDescription = hashParams?.get("error_description");
+
+        // 2. Error parameters in query string or URL hash fragment
+        if (search.error || search.error_description || hashError || hashErrorDescription) {
           if (!isMounted) return;
           setStatus("error");
-          setErrorMessage("The authentication or recovery link is invalid or has expired.");
+          setErrorMessage(
+            hashErrorDescription ||
+              search.error_description ||
+              "The authentication or recovery link is invalid or has expired."
+          );
           return;
         }
 
-        const client = getSupabaseBrowserClient();
+        const isRecovery =
+          search.type === "recovery" ||
+          hashParams?.get("type") === "recovery" ||
+          (typeof window !== "undefined" && window.location.hash.includes("type=recovery"));
 
-        // 2. PKCE Code Exchange
+        // 3. Modern token-hash verification (OTP / token_hash flow)
+        if (search.token_hash) {
+          const { error: otpError } = await authService.verifyOtp({
+            token_hash: search.token_hash,
+            type: (search.type as any) || "recovery",
+          });
+          if (otpError) {
+            if (!isMounted) return;
+            setStatus("error");
+            setErrorMessage(otpError.message || "Failed to verify the password recovery link. It may be invalid or expired.");
+            return;
+          }
+        }
+
+        // 4. PKCE Code Exchange
         if (search.code) {
           const { error: exchangeError } = await authService.exchangeCodeForSession(search.code);
           if (exchangeError) {
@@ -68,33 +109,50 @@ function AuthCallbackPage() {
           }
         }
 
-        // 3. Check for active session (either from code exchange or hash tokens)
-        const session = await authService.getSession();
-
-        // 4. Handle recovery vs standard redirect
-        const isRecovery = search.type === "recovery" || (typeof window !== "undefined" && window.location.hash.includes("type=recovery"));
-
-        if (!session && !isRecovery) {
-          // If no session established and not recovery, retry briefly or reject
-          const { data } = await client.auth.getSession();
-          if (!data.session) {
-            if (!isMounted) return;
-            setStatus("error");
-            setErrorMessage("No valid authentication session could be verified.");
-            return;
+        // 5. Implicit grant hash tokens (#access_token=...&refresh_token=...)
+        const hashAccessToken = hashParams?.get("access_token");
+        const hashRefreshToken = hashParams?.get("refresh_token");
+        if (hashAccessToken && hashRefreshToken) {
+          try {
+            await authService.setSession({
+              access_token: hashAccessToken,
+              refresh_token: hashRefreshToken,
+            });
+          } catch (err) {
+            console.warn("[AuthCallback] Non-fatal setSession error from hash:", err);
           }
+        }
+
+        // 6. Check for active session with bounded hydration polling
+        let session = await authService.getSession();
+        if (!session) {
+          for (let attempt = 0; attempt < 4; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 80));
+            if (!isMounted) return;
+            session = await authService.getSession();
+            if (session) break;
+          }
+        }
+
+        // 7. Require established session before navigating
+        if (!session) {
+          if (!isMounted) return;
+          setStatus("error");
+          setErrorMessage(
+            isRecovery
+              ? "Password recovery session could not be established. The link may be invalid or expired."
+              : "No valid authentication session could be verified."
+          );
+          return;
         }
 
         if (!isMounted) return;
         setStatus("success");
 
         // Record verified admin login session (excluding recovery flows)
-        if (!isRecovery) {
+        if (!isRecovery && session.access_token) {
           try {
-            const activeSession = session || (await client.auth.getSession()).data.session;
-            if (activeSession?.access_token) {
-              await adminClient.recordLoginHistory(activeSession.access_token);
-            }
+            await adminClient.recordLoginHistory(session.access_token);
           } catch (err) {
             console.warn("[AuthCallback] Non-fatal: failed to record login history", err);
           }

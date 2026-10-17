@@ -123,6 +123,12 @@ describe("Phase 1: Appearance & Site Settings Security, RBAC & Misleading-Contro
       getSession: vi.fn().mockResolvedValue({
         data: { session: user ? { access_token: "mock-token", user } : null },
       }),
+      mfa: {
+        getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+          data: { currentLevel: user ? "aal2" : null, nextLevel: user ? "aal2" : null },
+          error: null,
+        }),
+      },
     };
     (getSupabaseServerClient as any).mockReturnValue({ auth: mockAuth });
   }

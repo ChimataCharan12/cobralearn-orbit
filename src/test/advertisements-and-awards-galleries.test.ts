@@ -52,13 +52,19 @@ describe("Persistent Galleries: Advertisements & Awards Modules Only", () => {
     created_at: new Date().toISOString(),
   };
 
-  function createAuthRequest(user: User | null): Request {
+  function createAuthRequest(user: User | null, currentLevel: "aal1" | "aal2" = "aal1"): Request {
     (getSupabaseServerClient as any).mockReturnValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user },
           error: user ? null : { message: "Invalid session" },
         }),
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+            data: user ? { currentLevel, nextLevel: currentLevel, currentAuthenticationMethods: [] } : null,
+            error: null,
+          }),
+        },
       },
     });
 
@@ -804,7 +810,7 @@ describe("Persistent Galleries: Advertisements & Awards Modules Only", () => {
   describe("3. Media Deletion Protection for Galleries", () => {
     it("blocks deletion of a MediaAsset referenced by an Advertisement gallery with 409 Conflict", async () => {
       const prisma = createMockPrisma();
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
 
       // Attach media-gallery-1 to an advertisement
       await createAdminAdvertisementOperation(
@@ -839,7 +845,7 @@ describe("Persistent Galleries: Advertisements & Awards Modules Only", () => {
 
     it("blocks deletion of a MediaAsset referenced by an Award gallery with 409 Conflict", async () => {
       const prisma = createMockPrisma();
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
       const storageMock: any = {
         storage: {
           from: vi.fn().mockReturnValue({
@@ -874,7 +880,7 @@ describe("Persistent Galleries: Advertisements & Awards Modules Only", () => {
 
     it("allows deletion of MediaAsset once removed from gallery", async () => {
       const prisma = createMockPrisma();
-      const req = createAuthRequest(adminUser);
+      const req = createAuthRequest(adminUser, "aal2");
       const storageMock: any = {
         storage: {
           from: vi.fn().mockReturnValue({
