@@ -145,7 +145,12 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
     fireEvent.click(draftBtn);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    const [savedData, savedStatus] = onSave.mock.calls[0];
+    const firstCall = onSave.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) {
+      throw new Error("Expected onSave to have been called");
+    }
+    const [savedData, savedStatus] = firstCall;
     expect(savedStatus).toBe("Draft");
     expect(savedData.name).toBe("Draft Concept");
     expect(savedData.url).toBe("");
@@ -252,7 +257,12 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
     fireEvent.click(publishBtn);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    const [savedData, savedStatus] = onSave.mock.calls[0];
+    const firstCall = onSave.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) {
+      throw new Error("Expected onSave to have been called");
+    }
+    const [savedData, savedStatus] = firstCall;
     expect(savedStatus).toBe("Published");
     expect(savedData.url).toBe("https://portal.cobralearn.com");
   });
@@ -267,7 +277,8 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
       fullDescription: "Long description.",
       status: "Published",
       featured: true,
-      displayOrder: 1,
+      category: "Education",
+      order: 1,
       technologies: ["Next.js", "Tailwind CSS"],
       tags: ["Education"],
       thumbnailId: "media-existing-cover",
@@ -296,7 +307,12 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
     fireEvent.click(updateBtn);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    const [savedData] = onSave.mock.calls[0];
+    const firstCall = onSave.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) {
+      throw new Error("Expected onSave to have been called");
+    }
+    const [savedData] = firstCall;
     expect(savedData.thumbnailId).toBe("media-existing-cover");
   });
 
@@ -333,7 +349,12 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
 
     // Should NOT throw or fail; should submit as "Draft" with empty URL
     expect(onSave).toHaveBeenCalledTimes(1);
-    const [savedData, savedStatus] = onSave.mock.calls[0];
+    const firstCall = onSave.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) {
+      throw new Error("Expected onSave to have been called");
+    }
+    const [savedData, savedStatus] = firstCall;
     expect(savedStatus).toBe("Draft");
     expect(savedData.status).toBe("Draft");
     expect(savedData.url).toBe("");
@@ -351,7 +372,8 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
       description: "Still in drafting phase.",
       status: "Draft",
       featured: false,
-      displayOrder: 1,
+      category: "Education",
+      order: 1,
       technologies: ["React"],
       tags: [],
       thumbnailId: "media-existing-cover",
@@ -376,7 +398,12 @@ describe("WebsiteForm Lifecycle & Validation Suite", () => {
     fireEvent.click(updateBtn);
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    const [savedData, savedStatus] = onSave.mock.calls[0];
+    const firstCall = onSave.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) {
+      throw new Error("Expected onSave to have been called");
+    }
+    const [savedData, savedStatus] = firstCall;
     expect(savedStatus).toBe("Draft");
     expect(savedData.url).toBe("");
   });
