@@ -5,6 +5,7 @@ import {
   consumeRateLimit,
   peekRateLimit,
   resetMemoryRateLimitStore,
+  RateLimiterStorageError,
   AUTH_RATE_THRESHOLDS,
 } from "@/lib/server/rate-limiter";
 import {
@@ -19,6 +20,7 @@ import {
 import {
   evaluateLoginRateLimitOperation,
   requestPasswordResetOperation,
+  recordPasswordResetCompletionOperation,
 } from "@/lib/server/auth-rate-limit-operations";
 import { canPerform, AdminPermissions } from "@/lib/auth/rbac";
 import { AuthProvider, useAuth } from "@/lib/auth/use-auth";
@@ -267,31 +269,116 @@ describe("Phase 3 — CobraLearn Orbit Server-Side Rate Limiting & Abuse Protect
   });
 
   // =========================================================================
-  // Requirement 10: Limiter-store failures follow the documented safe failure policy
+  // Requirement 10: Hardened storage failures refuse silent fallback and fail closed
   // =========================================================================
-  it("Requirement 10: Limiter-store failures follow documented safe failure policy and engage fallback", async () => {
+  it("Requirement 10: Database rate-limiting storage failures reject silent fallback and fail closed", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    // Mock Prisma with broken queryRawUnsafe that throws connection error
+    // 1. Storage failure (connection dropped) throws RateLimiterStorageError
     const faultyPrisma = {
       $executeRawUnsafe: vi.fn().mockResolvedValue(1),
       $queryRawUnsafe: vi.fn().mockRejectedValue(new Error("Connection reset by peer")),
     } as any;
 
-    const res = await consumeRateLimit({
-      key: "test:faulty:store",
-      limit: 3,
-      windowSeconds: 60,
-      prismaClient: faultyPrisma,
-    });
+    await expect(
+      consumeRateLimit({
+        key: "test:faulty:store",
+        limit: 3,
+        windowSeconds: 60,
+        prismaClient: faultyPrisma,
+      })
+    ).rejects.toThrow(RateLimiterStorageError);
 
-    // Ensures the system didn't crash, logged the failure, and engaged safe fallback
-    expect(res).toBeDefined();
-    expect(res.allowed).toBe(true);
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[RateLimiter] Database rate limiting failed"),
+      expect.stringContaining("[RateLimiter] Database rate limiting storage failure"),
       expect.anything()
     );
+
+    // 2. Missing table failure explicitly throws RateLimiterStorageError
+    const missingTablePrisma = {
+      $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+      $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('relation "_orbit_rate_limits" does not exist')),
+    } as any;
+
+    await expect(
+      consumeRateLimit({
+        key: "test:missing_table",
+        limit: 3,
+        windowSeconds: 60,
+        prismaClient: missingTablePrisma,
+      })
+    ).rejects.toThrow(RateLimiterStorageError);
+
+    // 3. Healthy PostgreSQL-backed request retains atomic upsert behavior
+    const healthyPrisma = {
+      $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+      $queryRawUnsafe: vi.fn().mockResolvedValue([
+        { count: 1, reset_at: new Date(Date.now() + 60000).toISOString() },
+      ]),
+    } as any;
+
+    const healthyRes = await consumeRateLimit({
+      key: "test:healthy:postgres",
+      limit: 5,
+      windowSeconds: 60,
+      prismaClient: healthyPrisma,
+    });
+    expect(healthyRes.allowed).toBe(true);
+    expect(healthyRes.current).toBe(1);
+    expect(healthyRes.remaining).toBe(4);
+
+    // 4. evaluateLoginRateLimitOperation fails closed upon storage failure
+    const reqLogin = new Request("https://api.internal/auth/login", {
+      method: "POST",
+      headers: { "x-real-ip": "198.51.100.50" },
+    });
+    const loginFailClosed = await evaluateLoginRateLimitOperation(
+      reqLogin,
+      { email: "target@cobralearn.in" },
+      faultyPrisma
+    );
+    expect(loginFailClosed.allowed).toBe(false);
+    expect(loginFailClosed.message).toBe("Rate limit evaluation unavailable. Request rejected.");
+
+    // 5. requestPasswordResetOperation fails closed upon storage failure
+    const reqReset = new Request("https://api.internal/auth/recovery", {
+      method: "POST",
+      headers: { "x-real-ip": "198.51.100.50" },
+    });
+    const resetFailClosed = await requestPasswordResetOperation(
+      reqReset,
+      { email: "target@cobralearn.in" },
+      faultyPrisma
+    );
+    expect(resetFailClosed.success).toBe(false);
+    expect(resetFailClosed.message).toBe("Password reset service temporarily unavailable. Please try again later.");
+
+    // 6. recordPasswordResetCompletionOperation fails closed upon storage failure without provider update
+    const mockSupabaseAdmin = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "test-user-id", email: "target@cobralearn.in" } },
+          error: null,
+        }),
+        admin: {
+          updateUserById: vi.fn(),
+        },
+      },
+    } as any;
+
+    const reqComp = new Request("https://api.internal/auth/reset-completion", {
+      method: "POST",
+      headers: { "x-real-ip": "198.51.100.50" },
+    });
+    const compFailClosed = await recordPasswordResetCompletionOperation(
+      reqComp,
+      { accessToken: "valid.token.here", newPassword: "NewSecurePassword123!" },
+      faultyPrisma,
+      mockSupabaseAdmin
+    );
+    expect(compFailClosed.success).toBe(false);
+    expect(compFailClosed.message).toBe("Password reset service temporarily unavailable. Please try again later.");
+    expect(mockSupabaseAdmin.auth.admin.updateUserById).not.toHaveBeenCalled();
   });
 
   // =========================================================================

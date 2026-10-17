@@ -14,7 +14,7 @@ export interface RateLimitResult {
   limit: number;
   remaining: number;
   resetAt: Date;
-  retryAfterSeconds?: number;
+  retryAfterSeconds?: number | undefined;
 }
 
 /**
@@ -28,8 +28,19 @@ interface MemoryBucket {
 const memoryStore = new Map<string, MemoryBucket>();
 const MAX_MEMORY_STORE_SIZE = 10000;
 
-// Track if the PostgreSQL rate-limit table has been initialized
-let isTableInitialized = false;
+/**
+ * Error thrown when persistent rate-limiting storage is unavailable in production
+ * or when an explicit database client encounters an unrecoverable storage failure.
+ */
+export class RateLimiterStorageError extends Error {
+  constructor(message: string, public readonly originalError?: unknown) {
+    super(message);
+    this.name = "RateLimiterStorageError";
+    Object.setPrototypeOf(this, RateLimiterStorageError.prototype);
+  }
+}
+
+// Track when background database pruning was last executed
 let lastPrunedAt = 0;
 
 /**
@@ -52,37 +63,12 @@ function pruneMemoryStore(): void {
 }
 
 /**
- * Ensures the PostgreSQL atomic rate-limits table and index exist.
- */
-async function ensurePostgresTable(prisma: any): Promise<void> {
-  if (isTableInitialized) return;
-  try {
-    if (typeof prisma.$executeRawUnsafe === "function") {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS "_orbit_rate_limits" (
-          "key" VARCHAR(128) PRIMARY KEY,
-          "count" INT NOT NULL DEFAULT 1,
-          "reset_at" TIMESTAMPTZ NOT NULL
-        );
-      `);
-      await prisma.$executeRawUnsafe(`
-        CREATE INDEX IF NOT EXISTS "_orbit_rate_limits_reset_at_idx" 
-        ON "_orbit_rate_limits"("reset_at");
-      `);
-      isTableInitialized = true;
-    }
-  } catch (err) {
-    // If table creation fails (e.g. read-only replica or mock), continue to runtime fallback
-    console.warn("[RateLimiter] Database table initialization warning:", err instanceof Error ? err.message : String(err));
-  }
-}
-
-/**
  * Prunes expired rows from PostgreSQL table to maintain bounded storage.
+ * Executes a non-blocking DML DELETE query (not DDL).
+ * Runs at most once every 5 minutes per application process.
  */
 async function prunePostgresStore(prisma: any): Promise<void> {
   const now = Date.now();
-  // Run pruning at most once every 5 minutes
   if (now - lastPrunedAt < 5 * 60 * 1000) return;
   lastPrunedAt = now;
 
@@ -174,13 +160,22 @@ function peekMemoryRateLimit(
 
 /**
  * Atomically consumes a token or increments the rate-limit counter for a given key.
- * Backed by PostgreSQL atomic upsert queries with fallback to bounded memory store.
+ * Backed by PostgreSQL atomic upsert queries.
+ *
+ * SAFETY INVARIANTS:
+ * 1. Runtime table creation (DDL) is removed. The "_orbit_rate_limits" table is a mandatory
+ *    pre-deployment database prerequisite (see docs/database/orbit-rate-limits.sql).
+ * 2. In production or when an explicit database client is passed, database storage failures
+ *    will NEVER silently degrade to an in-memory store. Instead, RateLimiterStorageError is thrown,
+ *    enabling the caller to fail closed and preserve distributed security boundaries.
+ * 3. In test/development mode without a configured database or when forceMemoryStore is true,
+ *    the process-bounded memory store is preserved.
  */
 export async function consumeRateLimit(options: RateLimitOptions): Promise<RateLimitResult> {
   const { key, limit, windowSeconds, forceMemoryStore } = options;
 
   // In memory-forced mode or when testing without explicit database connection
-  if (forceMemoryStore || (process.env.VITEST && !options.prismaClient)) {
+  if (forceMemoryStore || (process.env["VITEST"] && !options.prismaClient)) {
     return consumeMemoryRateLimit(key, limit, windowSeconds);
   }
 
@@ -195,13 +190,18 @@ export async function consumeRateLimit(options: RateLimitOptions): Promise<RateL
     }
   }
 
-  // If Prisma queryRaw is unavailable, use test/memory store
-  if (!prisma || typeof (prisma as any).$queryRawUnsafe !== "function") {
+  const hasRawQuery = Boolean(prisma && typeof (prisma as any).$queryRawUnsafe === "function");
+
+  // If Prisma queryRaw is unavailable:
+  if (!hasRawQuery) {
+    if (process.env["NODE_ENV"] === "production") {
+      console.error("[RateLimiter] Database client with queryRawUnsafe is unavailable in production. Rejecting silent fallback.");
+      throw new RateLimiterStorageError("Rate limiter database connection unavailable.");
+    }
     return consumeMemoryRateLimit(key, limit, windowSeconds);
   }
 
   try {
-    await ensurePostgresTable(prisma);
     await prunePostgresStore(prisma);
 
     const resetTimestamp = new Date(Date.now() + windowSeconds * 1000);
@@ -247,14 +247,25 @@ export async function consumeRateLimit(options: RateLimitOptions): Promise<RateL
       };
     }
 
-    // Fallback if query returned empty
-    return consumeMemoryRateLimit(key, limit, windowSeconds);
+    throw new RateLimiterStorageError("Database rate limiting query returned empty result.");
   } catch (err) {
-    console.error("[RateLimiter] Database rate limiting failed, engaging safe fallback:", {
+    if (err instanceof RateLimiterStorageError) {
+      throw err;
+    }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[RateLimiter] Database rate limiting storage failure:", {
       keyPrefix: key.slice(0, 8),
-      error: err instanceof Error ? err.message : String(err),
+      error: errMsg,
     });
-    // Resilient fallback: engage memory-bounded limiter
+
+    // In production or when a database client is explicitly configured:
+    // Reject silent in-memory fallback to avoid multi-instance limit dilution.
+    if (process.env["NODE_ENV"] === "production" || options.prismaClient) {
+      throw new RateLimiterStorageError("Database rate limiting storage failure.", err);
+    }
+
+    // Safe dev fallback only in local non-production environments
+    console.warn("[RateLimiter] Engaging local development in-memory fallback for key:", key.slice(0, 8));
     return consumeMemoryRateLimit(key, limit, windowSeconds);
   }
 }
@@ -265,7 +276,7 @@ export async function consumeRateLimit(options: RateLimitOptions): Promise<RateL
 export async function peekRateLimit(options: RateLimitOptions): Promise<RateLimitResult> {
   const { key, limit, windowSeconds, forceMemoryStore } = options;
 
-  if (forceMemoryStore || (process.env.VITEST && !options.prismaClient)) {
+  if (forceMemoryStore || (process.env["VITEST"] && !options.prismaClient)) {
     return peekMemoryRateLimit(key, limit, windowSeconds);
   }
 
@@ -280,7 +291,13 @@ export async function peekRateLimit(options: RateLimitOptions): Promise<RateLimi
     }
   }
 
-  if (!prisma || typeof (prisma as any).$queryRawUnsafe !== "function") {
+  const hasRawQuery = Boolean(prisma && typeof (prisma as any).$queryRawUnsafe === "function");
+
+  if (!hasRawQuery) {
+    if (process.env["NODE_ENV"] === "production") {
+      console.error("[RateLimiter] Database client with queryRawUnsafe is unavailable in production. Rejecting silent fallback.");
+      throw new RateLimiterStorageError("Rate limiter database connection unavailable.");
+    }
     return peekMemoryRateLimit(key, limit, windowSeconds);
   }
 
@@ -320,8 +337,60 @@ export async function peekRateLimit(options: RateLimitOptions): Promise<RateLimi
       remaining: limit,
       resetAt: new Date(Date.now() + windowSeconds * 1000),
     };
-  } catch {
+  } catch (err) {
+    if (err instanceof RateLimiterStorageError) {
+      throw err;
+    }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[RateLimiter] Database rate limiting peek failure:", {
+      keyPrefix: key.slice(0, 8),
+      error: errMsg,
+    });
+    if (process.env["NODE_ENV"] === "production" || options.prismaClient) {
+      throw new RateLimiterStorageError("Database rate limiting storage failure.", err);
+    }
     return peekMemoryRateLimit(key, limit, windowSeconds);
+  }
+}
+
+/**
+ * Atomically clears or resets a specific rate limit or lock key.
+ * Backed by DELETE query on PostgreSQL with in-memory store eviction fallback.
+ */
+export async function clearRateLimit(options: {
+  key: string;
+  prismaClient?: PrismaClient;
+  forceMemoryStore?: boolean;
+}): Promise<void> {
+  const { key, forceMemoryStore } = options;
+  memoryStore.delete(key);
+
+  if (forceMemoryStore || (process.env["VITEST"] && !options.prismaClient)) {
+    return;
+  }
+
+  let prisma = options.prismaClient;
+  if (!prisma) {
+    try {
+      const { PrismaClient } = await import("@prisma/client");
+      prisma = new PrismaClient();
+    } catch {
+      // Prisma not available
+    }
+  }
+
+  if (prisma && typeof (prisma as any).$executeRawUnsafe === "function") {
+    try {
+      await (prisma as any).$executeRawUnsafe(
+        `DELETE FROM "_orbit_rate_limits" WHERE "key" = $1;`,
+        key
+      );
+    } catch (err) {
+      console.warn("[RateLimiter] Database clear rate limit warning:", {
+        keyPrefix: key.slice(0, 8),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 
@@ -350,5 +419,32 @@ export const AUTH_RATE_THRESHOLDS = {
   RECOVERY_IP: {
     limit: 10,
     windowSeconds: 60 * 60, // 60 minutes
+  },
+  // Single-use Recovery Code Redemption: 5 attempts per account / 15 mins, 15 attempts per IP / 15 mins
+  RECOVERY_CODE_ACCOUNT: {
+    limit: 5,
+    windowSeconds: 15 * 60, // 15 minutes
+  },
+  RECOVERY_CODE_IP: {
+    limit: 15,
+    windowSeconds: 15 * 60, // 15 minutes
+  },
+  // Password Reset Completion: 5 attempts per account / 15 mins, 10 attempts per IP / 15 mins
+  RESET_COMPLETION_ACCOUNT: {
+    limit: 5,
+    windowSeconds: 15 * 60, // 15 minutes
+  },
+  RESET_COMPLETION_IP: {
+    limit: 10,
+    windowSeconds: 15 * 60, // 15 minutes
+  },
+  // Administrator Password Change: 5 attempts per account / 15 mins, 10 attempts per IP / 15 mins
+  PASSWORD_CHANGE_ACCOUNT: {
+    limit: 5,
+    windowSeconds: 15 * 60, // 15 minutes
+  },
+  PASSWORD_CHANGE_IP: {
+    limit: 10,
+    windowSeconds: 15 * 60, // 15 minutes
   },
 };

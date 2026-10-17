@@ -3,10 +3,16 @@ import { getRequest } from "@tanstack/react-start/server";
 import {
   evaluateLoginRateLimitOperation,
   requestPasswordResetOperation,
+  recordPasswordResetCompletionOperation,
+  changeAdminPasswordOperation,
   type EvaluateLoginPayload,
   type EvaluateLoginResult,
   type RequestPasswordResetPayload,
   type RequestPasswordResetResult,
+  type RecordPasswordResetCompletionPayload,
+  type RecordPasswordResetCompletionResult,
+  type ChangeAdminPasswordPayload,
+  type ChangeAdminPasswordResult,
 } from "@/lib/server/auth-rate-limit-operations";
 
 /**
@@ -80,4 +86,24 @@ export const requestPasswordResetServerFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<RequestPasswordResetResult> => {
     const request = createAmbientRequest("https://api.internal/auth/rate-limit/recovery", "POST", data);
     return await requestPasswordResetOperation(request, data);
+  });
+
+/**
+ * Server Function: Authoritatively records password reset completion in AdminAuditLog.
+ */
+export const recordPasswordResetCompletionServerFn = createServerFn({ method: "POST" })
+  .validator((data: RecordPasswordResetCompletionPayload) => data)
+  .handler(async ({ data }): Promise<RecordPasswordResetCompletionResult> => {
+    const request = createAmbientRequest("https://api.internal/auth/rate-limit/reset-completion", "POST", data);
+    return await recordPasswordResetCompletionOperation(request, data);
+  });
+
+/**
+ * Server Function: Authoritatively executes administrator password change at AAL2.
+ */
+export const changeAdminPasswordServerFn = createServerFn({ method: "POST" })
+  .validator((data: ChangeAdminPasswordPayload) => data)
+  .handler(async ({ data }): Promise<ChangeAdminPasswordResult> => {
+    const request = createAmbientRequest("https://api.internal/auth/change-password", "POST", data);
+    return await changeAdminPasswordOperation(request, data);
   });
