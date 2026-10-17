@@ -158,11 +158,10 @@ describe("CobraLearn Dual PWA — Architecture & Security Verification", () => {
       expect(manifestLink?.href).toBe("/manifest-admin.webmanifest");
     });
 
-    it("verifies AdminIndexRoute explicitly provides the admin manifest in its own head links", () => {
+    it("verifies AdminIndexRoute relies on __root for manifest and does not emit redundant manifest links", () => {
       const adminHead = (AdminIndexRoute.options as any).head();
       const manifestLink = adminHead.links?.find((l: any) => l.rel === "manifest");
-      expect(manifestLink).toBeDefined();
-      expect(manifestLink?.href).toBe("/manifest-admin.webmanifest");
+      expect(manifestLink).toBeUndefined();
     });
   });
 

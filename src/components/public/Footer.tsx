@@ -2,7 +2,7 @@ import { Instagram, Linkedin, Youtube, Github, Globe } from "lucide-react";
 import type { GlobalSocialLink } from "@prisma/client";
 import type { FooterSectionWithLinks } from "@/lib/server/navigation-operations";
 import { BrandMark } from "./BrandMark";
-import { resolveNavigationHref } from "@/lib/navigation-utils";
+import { isSectionAnchor, resolveNavigationHref } from "@/lib/navigation-utils";
 import { useRouterState } from "@tanstack/react-router";
 
 export interface FooterProps {
@@ -99,12 +99,15 @@ export function Footer({ sections, socialLinks }: FooterProps = {}) {
                   {sec.links && sec.links.length > 0 ? (
                     sec.links.map((lnk) => {
                       const resolvedHref = resolveNavigationHref(lnk.url, pathname);
+                      const isAnchor = isSectionAnchor(resolvedHref) || isSectionAnchor(lnk.url);
+                      const target = !isAnchor && lnk.openInNewTab ? "_blank" : undefined;
+                      const rel = !isAnchor && lnk.openInNewTab ? "noreferrer" : undefined;
                       return (
                         <li key={lnk.id || lnk.label}>
                           <a
                             href={resolvedHref}
-                            target={lnk.openInNewTab ? "_blank" : undefined}
-                            rel={lnk.openInNewTab ? "noreferrer" : undefined}
+                            target={target}
+                            rel={rel}
                             className="text-[#94a3b8] transition-colors duration-200 hover:text-[#00ff87] hover:drop-shadow-[0_0_6px_#00ff87]"
                           >
                             {lnk.label}

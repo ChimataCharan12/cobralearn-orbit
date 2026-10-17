@@ -84,13 +84,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     const manifestHref = isAdminRoute ? "/manifest-admin.webmanifest" : "/manifest.webmanifest";
     const themeColor = isAdminRoute ? "#020604" : "#020806";
     const faviconHref = loaderData?.publicAppearance?.faviconUrl || "/favicon.png";
+    const rootTitle = isAdminRoute
+      ? "CobraLearn Innotechcore Admin"
+      : "CobraLearn Innotechcore — Learn, Build, Grow";
+    const rootDescription = isAdminRoute
+      ? "Private administration portal for the CobraLearn showcase."
+      : "CobraLearn Innotechcore showcase platform.";
     return {
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { name: "theme-color", content: themeColor },
-        { title: "CobraLearn Innotechcore Admin" },
-        { name: "description", content: "Private administration portal for the CobraLearn showcase." },
+        { title: rootTitle },
+        { name: "description", content: rootDescription },
         { name: "author", content: "CobraLearn Innotechcore" },
         { property: "og:type", content: "website" },
         { property: "og:image", content: DEFAULT_OG_IMAGE },
@@ -109,7 +115,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         },
         { rel: "icon", href: faviconHref, type: "image/png" },
         { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
-        { rel: "manifest", href: manifestHref },
+        { rel: "manifest", href: manifestHref, id: "app-manifest" },
       ],
     };
   },

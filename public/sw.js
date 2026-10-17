@@ -4,7 +4,7 @@
  */
 
 const CACHE_NAME_PREFIX = "cobralearn-";
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 
 const STATIC_CACHE = `${CACHE_NAME_PREFIX}static-${CACHE_VERSION}`;
 const PAGES_CACHE = `${CACHE_NAME_PREFIX}pages-${CACHE_VERSION}`;
@@ -143,20 +143,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Rule 8: Web Manifests -> Stale-While-Revalidate
+  // Rule 8: Web Manifests -> Network-First with fallback to cache
   if (url.pathname.endsWith(".webmanifest")) {
     event.respondWith(
-      caches.open(STATIC_CACHE).then((cache) => {
-        return cache.match(request).then((cached) => {
-          const fetchPromise = fetch(request).then((networkResponse) => {
-            if (networkResponse.ok) {
-              cache.put(request, networkResponse.clone());
-            }
-            return networkResponse;
-          }).catch(() => cached);
-          return cached || fetchPromise;
-        });
-      })
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse.ok && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(STATIC_CACHE).then((cache) => {
+              cache.put(request, clone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.open(STATIC_CACHE).then((cache) => {
+            return cache.match(request);
+          });
+        })
     );
     return;
   }

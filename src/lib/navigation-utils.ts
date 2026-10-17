@@ -79,3 +79,11 @@ export function resolveNavigationHref(
   return `/${trimmed}`;
 }
 
+/**
+ * Checks if a given URL or href is a same-page section anchor (e.g. "#awards", "/#awards").
+ */
+export function isSectionAnchor(href: string | undefined | null): boolean {
+  if (!href) return false;
+  const trimmed = href.trim();
+  return trimmed.startsWith("#") || trimmed.startsWith("/#");
+}

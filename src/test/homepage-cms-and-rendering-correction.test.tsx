@@ -9,7 +9,7 @@ import { HomepageEditor } from "@/components/homepage/HomepageEditor";
 import { HomepagePreview } from "@/components/homepage/HomepagePreview";
 import { FooterPreview } from "@/components/navigation/FooterPreview";
 import { NavigationPreview } from "@/components/navigation/NavigationPreview";
-import { resolveNavigationHref } from "@/lib/navigation-utils";
+import { isSectionAnchor, resolveNavigationHref } from "@/lib/navigation-utils";
 import { validateSafeUrl } from "@/lib/server/homepage-operations";
 import { validateSafeLink } from "@/lib/server/navigation-operations";
 import type { HomepageSectionWithMedia } from "@/lib/server/homepage-operations";
@@ -333,6 +333,17 @@ describe("Homepage CMS, Dynamic Preview & Public Rendering Correction Test Suite
 
       expect(() => validateSafeUrl("javascript:alert(1)")).toThrow("Validation Error");
       expect(() => validateSafeLink("data:text/html,evil")).toThrow("Validation Error");
+    });
+
+    it("correctly identifies same-page section anchors", () => {
+      expect(isSectionAnchor("#awards")).toBe(true);
+      expect(isSectionAnchor("/#awards")).toBe(true);
+      expect(isSectionAnchor("#projects")).toBe(true);
+      expect(isSectionAnchor("/#projects")).toBe(true);
+      expect(isSectionAnchor("https://example.com")).toBe(false);
+      expect(isSectionAnchor("/contact")).toBe(false);
+      expect(isSectionAnchor(null)).toBe(false);
+      expect(isSectionAnchor(undefined)).toBe(false);
     });
   });
 

@@ -4,7 +4,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { NavigationItem } from "@prisma/client";
 import { BrandMark } from "./BrandMark";
 import { Button } from "@/components/ui/button";
-import { resolveNavigationHref } from "@/lib/navigation-utils";
+import { isSectionAnchor, resolveNavigationHref } from "@/lib/navigation-utils";
 
 const defaultLinks = [
   { label: "HOME", to: "/", hash: "home" },
@@ -44,8 +44,9 @@ export function Header({ navItems }: HeaderProps = {}) {
             const isContact = resolvedHref === "/contact";
             const labelText = item.label.toUpperCase();
             const isButton = item.type === "BUTTON";
-            const target = item.openInNewTab ? "_blank" : undefined;
-            const rel = item.openInNewTab ? "noreferrer" : undefined;
+            const isAnchor = isSectionAnchor(resolvedHref) || isSectionAnchor(item.link);
+            const target = !isAnchor && item.openInNewTab ? "_blank" : undefined;
+            const rel = !isAnchor && item.openInNewTab ? "noreferrer" : undefined;
 
             if (isContact) {
               const isActive = pathname === "/contact" || pathname === "/contact/";

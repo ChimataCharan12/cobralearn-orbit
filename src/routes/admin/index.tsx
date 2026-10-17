@@ -23,9 +23,6 @@ export const Route = createFileRoute("/admin/")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [
-      { rel: "manifest", href: "/manifest-admin.webmanifest" },
-    ],
   }),
   component: Index,
 });
