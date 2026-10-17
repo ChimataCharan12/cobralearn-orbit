@@ -1,4 +1,4 @@
-﻿# CobraLearn Orbit â€” Rate-Limiting Database Setup Guide
+# CobraLearn Orbit â€” Rate-Limiting Database Setup Guide
 
 > **STATUS:** PREPARATION ONLY â€” This script and setup process have **NOT** been executed against any database.
 > **Target Table:** `_orbit_rate_limits`
@@ -32,36 +32,31 @@ The schema defined in [`orbit-rate-limits.sql`](./orbit-rate-limits.sql) matches
 
 ---
 
-## 3. Why the Table Must Exist Before Production Traffic
+## 3. Why the Table Must Exist Before Production Traffic (Mandatory Prerequisite)
 
-In development and local environments, [`src/lib/server/rate-limiter.ts`](../../src/lib/server/rate-limiter.ts) attempts to dynamically create this table via `ensurePostgresTable()` using `prisma.$executeRawUnsafe()`.
+Runtime table creation (`CREATE TABLE` / `ensurePostgresTable()`) has been completely removed from the request path in [`src/lib/server/rate-limiter.ts`](../../src/lib/server/rate-limiter.ts).
 
-However, in a production environment:
-1. **Transaction Pooling Constraints:** The production runtime connection (`DATABASE_URL`) connects through Supabase PgBouncer (port `6543`) in transaction pooling mode (`?pgbouncer=true`). DDL statements (`CREATE TABLE`, `CREATE INDEX`) can fail, emit transaction warnings, or be blocked by pooler configuration.
-2. **Least-Privilege Database Roles:** Production database roles should operate under least privilege and may intentionally lack `CREATE TABLE` privileges in the `public` schema.
-3. **Traffic Spikes at Startup:** If multiple concurrent requests hit the portal on a cold start before the table exists, all instances attempt concurrent table creation, causing lock contention or table initialization warnings.
-
-Pre-creating the table ensures the database is fully initialized before any user traffic arrives.
+Pre-creating `_orbit_rate_limits` before routing production traffic is a **mandatory prerequisite** because:
+1. **Transaction Pooling Constraints:** The production runtime connection (`DATABASE_URL`) connects through Supabase PgBouncer (port `6543`) in transaction pooling mode (`?pgbouncer=true`). DDL statements (`CREATE TABLE`, `CREATE INDEX`) fail, emit transaction warnings, or are blocked by pooler configuration.
+2. **Least-Privilege Database Roles:** Production database roles operate under least privilege and lack `CREATE TABLE` privileges in the `public` schema.
+3. **Multi-Instance Integrity:** If the table does not exist prior to deployment, the rate-limiting system fails closed rather than silently falling back to a process-local memory store.
 
 ---
 
-## 4. Runtime DDL Failure and In-Memory Fallback
+## 4. Production Storage Failure Policy (Fail Closed, No Silent Fallback)
 
-If `ensurePostgresTable()` or the atomic upsert query fails at runtime (e.g., if the table is absent and the connection cannot create it):
-- The error is caught gracefully in [`rate-limiter.ts:252`](../../src/lib/server/rate-limiter.ts#L252).
-- The system logs a sanitized warning: `[RateLimiter] Database rate limiting failed, engaging safe fallback`.
-- The rate limiter immediately falls back to `consumeMemoryRateLimit()`.
+In production, if the rate-limit table is absent or PostgreSQL experiences an outage:
+- The rate limiter logs a sanitized error: `[RateLimiter] Database rate limiting storage failure` (redacting sensitive keys and credentials).
+- The rate limiter throws `RateLimiterStorageError`. It **DOES NOT** silently fall back to an in-memory store in production or when a database client is configured.
+- Protected authentication operations (`login`, `password-reset`, `reset-completion`, `password-change`, `recovery-code`) catch this error and **fail closed**, returning a safe 500 error (`"Rate limit evaluation unavailable. Request rejected."` or `"Service temporarily unavailable. Please try again later."`).
+- This prevents brute-force abuse across multi-instance deployments when the shared store is unreachable.
 
 ---
 
-## 5. Multi-Instance Risks of In-Memory Fallback
+## 5. Development and Test Store Isolation
 
-While the in-memory fallback prevents portal downtime, it introduces significant security limitations in a multi-instance or serverless deployment:
-- **Process Isolation:** The memory store (`Map<string, MemoryBucket>`) is local to a single Node.js operating system process.
-- **Diluted Thresholds:** If the portal is deployed with 3 horizontal instances or container replicas, an attacker's requests will be load-balanced across instances. Instead of being blocked after 5 failed login attempts, the attacker could attempt up to 15 times before all instances register threshold exhaustion.
-- **Volatility on Restart:** Server restarts, blue-green deployments, or container recycling instantly wipe in-memory counters, resetting all active lockouts.
-
-**Conclusion:** Persistent PostgreSQL storage via `_orbit_rate_limits` is mandatory for consistent, shared rate-limiting enforcement.
+- In automated tests (`process.env.VITEST && !options.prismaClient`) or when `forceMemoryStore: true` is explicitly passed, the process-local in-memory store is preserved for fast, isolated testing.
+- Test-specific in-memory fallback cannot become an implicit production fallback.
 
 ---
 

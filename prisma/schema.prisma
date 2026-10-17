@@ -67,31 +67,97 @@ enum AdminRole {
   EDITOR
 }
 
+enum MfaRecoveryActorType {
+  SUPER_ADMIN_PEER
+  HOST_CLI_BREAK_GLASS
+  SYSTEM_RECONCILER
+}
+
+enum MfaRecoveryStatus {
+  PENDING
+  FACTOR_DELETED
+  COMPLETED
+  FAILED
+  RECONCILIATION_REQUIRED
+}
+
 // ============================================================
 // 2. IDENTITY & GOVERNANCE MODELS
 // ============================================================
 
 model AdminProfile {
-  id          String    @id // Supabase Auth user ID (UUID)
-  email       String    @unique
-  fullName    String
-  designation String?
-  avatarUrl   String?
-  role        AdminRole @default(EDITOR)
-  phone       String?
-  bio         String?
-  preferences Json?
-  isActive    Boolean   @default(true)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                 String             @id // Supabase Auth user ID (UUID)
+  email              String             @unique
+  fullName           String
+  designation        String?
+  avatarUrl          String?
+  role               AdminRole          @default(EDITOR)
+  phone              String?
+  bio                String?
+  preferences        Json?
+  isActive           Boolean            @default(true)
+  lastLoginAt        DateTime?
+  mfaRecoveryPending Boolean            @default(false)
+  mfaRecoveryAt      DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   // Relationships
-  uploadedMedia MediaAsset[]
-  auditLogs     AdminAuditLog[]
-  sentReplies   ContactMessageReply[]
-  notifications AdminNotification[]
-  loginHistory  AdminLoginHistory[]
+  uploadedMedia         MediaAsset[]
+  auditLogs             AdminAuditLog[]
+  sentReplies           ContactMessageReply[]
+  notifications         AdminNotification[]
+  loginHistory          AdminLoginHistory[]
+  mfaRecoveriesAsTarget AdminMfaRecovery[]  @relation("TargetMfaRecoveries")
+  mfaRecoveriesAsActor  AdminMfaRecovery[]  @relation("ActorMfaRecoveries")
+  recoveryCodes         AdminRecoveryCode[]
+}
+
+model AdminMfaRecovery {
+  id                  String               @id @default(uuid())
+  actorType           MfaRecoveryActorType @default(SUPER_ADMIN_PEER)
+  actorId             String?
+  actorEmail          String
+  actorIdentifier     String?
+  targetId            String
+  targetEmail         String
+  targetRoleSnapshot  AdminRole
+  status              MfaRecoveryStatus    @default(PENDING)
+  justification       String
+  factorId            String?
+  failureCategory     String?
+  failureReason       String?
+  reconciliationNotes String?
+  reconciledAt        DateTime?
+  reconciledByActorId String?
+  initiatedAt         DateTime             @default(now())
+  factorDeletedAt     DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  // Relationships
+  targetAdmin AdminProfile  @relation("TargetMfaRecoveries", fields: [targetId], references: [id], onDelete: Restrict)
+  actorAdmin  AdminProfile? @relation("ActorMfaRecoveries", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([targetId, status])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model AdminRecoveryCode {
+  id        String    @id @default(uuid())
+  adminId   String
+  codeHash  String
+  codeSalt  String
+  isUsed    Boolean   @default(false)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Relationships
+  admin AdminProfile @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, isUsed])
+  @@index([adminId, createdAt(sort: Desc)])
 }
 
 model AdminLoginHistory {
