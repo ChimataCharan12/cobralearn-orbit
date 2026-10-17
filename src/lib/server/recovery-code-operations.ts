@@ -6,7 +6,11 @@ import {
   hashIpIdentifier,
   maskIpAddress,
 } from "@/lib/server/client-ip";
-import { consumeRateLimit, AUTH_RATE_THRESHOLDS } from "@/lib/server/rate-limiter";
+import {
+  consumeRateLimit,
+  AUTH_RATE_THRESHOLDS,
+  type RateLimitResult,
+} from "@/lib/server/rate-limiter";
 import {
   generateRecoveryCodeSet,
   generateSaltHex,
@@ -19,7 +23,7 @@ import {
 let defaultPrisma: PrismaClient | null = null;
 
 async function getPrisma(): Promise<PrismaClient | undefined> {
-  if (process.env.VITEST) {
+  if (process.env["VITEST"]) {
     return undefined;
   }
   if (!defaultPrisma || typeof (defaultPrisma as any).adminRecoveryCode === "undefined") {
@@ -228,8 +232,15 @@ export async function verifyAndRedeemRecoveryCodeOperation(
   const rawCode = (payload?.code || "").trim();
 
   // 1. Rate limiting evaluation (per account and per IP)
-  const accountHash = hashAccountIdentifier(rawAdminId || "unknown");
-  const ipHash = hashIpIdentifier(clientIp);
+  let accountHash: string;
+  let ipHash: string;
+  try {
+    accountHash = hashAccountIdentifier(rawAdminId || "unknown");
+    ipHash = hashIpIdentifier(clientIp);
+  } catch (err) {
+    console.error("[verifyRecoveryCodeOperation] Rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+    return { success: false, error: SERVICE_UNAVAILABLE_RECOVERY_ERROR };
+  }
 
   const accountKey = `recov_code:act:${accountHash}`;
   const ipKey = `recov_code:ip:${ipHash}`;

@@ -51,7 +51,7 @@ export function maskIpAddress(ip: string | null | undefined): string {
 
 /**
  * Resolves trusted client IP from HTTP headers.
- * 
+ *
  * Trust Hierarchy:
  * 1. Edge-validated provider header: `cf-connecting-ip` (Cloudflare edge) or `true-client-ip`.
  * 2. Reverse proxy header: `x-real-ip`.
@@ -60,7 +60,9 @@ export function maskIpAddress(ip: string | null | undefined): string {
  *    Therefore, we parse the chain from the rightmost (closest trusted proxy hop) and validate.
  * 4. Fallback: "127.0.0.1" for development or "unknown".
  */
-export function extractTrustedClientIp(headers: Headers | Record<string, string | null | undefined>): string {
+export function extractTrustedClientIp(
+  headers: Headers | Record<string, string | null | undefined>,
+): string {
   const getHeader = (name: string): string | null => {
     if (typeof (headers as any)?.get === "function") {
       return (headers as Headers).get(name);
@@ -105,7 +107,7 @@ export function extractTrustedClientIp(headers: Headers | Record<string, string 
   }
 
   // 4. Safe fallback
-  if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") {
+  if (process.env["NODE_ENV"] === "development" || process.env["NODE_ENV"] === "test") {
     return "127.0.0.1";
   }
 
@@ -113,15 +115,88 @@ export function extractTrustedClientIp(headers: Headers | Record<string, string 
 }
 
 /**
- * Returns a keyed HMAC secret used to hash sensitive identifiers (emails, IPs)
- * before using them in rate-limit keys or security logs.
+ * Error thrown when RATE_LIMIT_SECRET configuration is missing, invalid, or insecure.
  */
-function getRateLimitSecret(): string {
-  return (
-    process.env["RATE_LIMIT_SECRET"] ||
-    process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
-    "orbit-rate-limit-default-salt-v1"
-  );
+export class RateLimitConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RateLimitConfigurationError";
+    Object.setPrototypeOf(this, RateLimitConfigurationError.prototype);
+  }
+}
+
+/**
+ * Returns a dedicated keyed HMAC secret used to hash sensitive identifiers (emails, IPs)
+ * before using them in rate-limit keys or security logs.
+ *
+ * PRODUCTION SAFETY INVARIANTS:
+ * 1. In production (NODE_ENV === "production"), RATE_LIMIT_SECRET MUST be explicitly configured.
+ * 2. It must have at least 32 characters of high-entropy material (>= 256 bits recommended).
+ * 3. It will NEVER fall back to SUPABASE_SERVICE_ROLE_KEY, another application secret, or a static default.
+ * 4. Reusing SUPABASE_SERVICE_ROLE_KEY or static/development salts in production is strictly prohibited.
+ * 5. If missing, empty, or insufficient in production, throws RateLimitConfigurationError (failing closed).
+ * 6. Non-production (dev/test) fallbacks are strictly isolated to non-production environments.
+ */
+export function getRateLimitSecret(): string {
+  const isProduction = process.env["NODE_ENV"] === "production";
+  const configuredSecret = process.env["RATE_LIMIT_SECRET"]?.trim();
+
+  if (isProduction) {
+    if (!configuredSecret) {
+      throw new RateLimitConfigurationError(
+        "RATE_LIMIT_SECRET environment variable is missing or empty in production. A dedicated high-entropy secret is required.",
+      );
+    }
+
+    if (configuredSecret.length < 32) {
+      throw new RateLimitConfigurationError(
+        "RATE_LIMIT_SECRET has insufficient entropy in production. Must be at least 32 characters.",
+      );
+    }
+
+    const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"]?.trim();
+    if (serviceRoleKey && configuredSecret === serviceRoleKey) {
+      throw new RateLimitConfigurationError(
+        "RATE_LIMIT_SECRET must not reuse SUPABASE_SERVICE_ROLE_KEY. A dedicated secret is required.",
+      );
+    }
+
+    if (
+      configuredSecret === "orbit-rate-limit-default-salt-v1" ||
+      configuredSecret.startsWith("orbit-dev-") ||
+      configuredSecret.startsWith("orbit-test-")
+    ) {
+      throw new RateLimitConfigurationError(
+        "RATE_LIMIT_SECRET in production cannot use static or development fallback secrets.",
+      );
+    }
+
+    return configuredSecret;
+  }
+
+  // Non-production (development or test)
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+
+  // Explicit non-production fallback strictly for development and test environments
+  if (process.env["NODE_ENV"] === "development") {
+    return "orbit-dev-rate-limit-secret-local-development-only-not-for-prod";
+  }
+
+  if (process.env["NODE_ENV"] === "test" || process.env["VITEST"]) {
+    return "orbit-test-rate-limit-secret-32-bytes-mock-key-for-testing-only";
+  }
+
+  return "orbit-dev-rate-limit-secret-local-development-only-not-for-prod";
+}
+
+/**
+ * Validates the rate limiting configuration without performing an operation.
+ * Throws RateLimitConfigurationError if the configuration is invalid.
+ */
+export function validateRateLimitConfig(): void {
+  getRateLimitSecret();
 }
 
 /**

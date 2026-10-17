@@ -81,8 +81,18 @@ export async function evaluateLoginRateLimitOperation(
   const isPeek = Boolean(payload?.peek);
   const limiterFn = isPeek ? peekRateLimit : consumeRateLimit;
 
-  const accountHash = cleanEmail ? hashAccountIdentifier(cleanEmail) : "";
-  const ipHash = hashIpIdentifier(clientIp);
+  let accountHash = "";
+  let ipHash = "";
+  try {
+    accountHash = cleanEmail ? hashAccountIdentifier(cleanEmail) : "";
+    ipHash = hashIpIdentifier(clientIp);
+  } catch (err) {
+    console.error("[evaluateLoginRateLimitOperation] Rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+    return {
+      allowed: false,
+      message: "Rate limit evaluation unavailable. Request rejected.",
+    };
+  }
 
   const accountKey = cleanEmail ? `login:act:${accountHash}` : null;
   const ipKey = `login:ip:${ipHash}`;
@@ -210,8 +220,18 @@ export async function requestPasswordResetOperation(
     };
   }
 
-  const accountHash = hashAccountIdentifier(cleanEmail);
-  const ipHash = hashIpIdentifier(clientIp);
+  let accountHash: string;
+  let ipHash: string;
+  try {
+    accountHash = hashAccountIdentifier(cleanEmail);
+    ipHash = hashIpIdentifier(clientIp);
+  } catch (err) {
+    console.error("[requestPasswordResetOperation] Rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+    return {
+      success: false,
+      message: "Password reset service temporarily unavailable. Please try again later.",
+    };
+  }
 
   const accountKey = `recov:act:${accountHash}`;
   const ipKey = `recov:ip:${ipHash}`;
@@ -411,7 +431,13 @@ export async function recordPasswordResetCompletionOperation(
   }
 
   // 1. IP-level rate limiting
-  const ipHash = hashIpIdentifier(clientIp);
+  let ipHash: string;
+  try {
+    ipHash = hashIpIdentifier(clientIp);
+  } catch (err) {
+    console.error("[recordPasswordResetCompletionOperation] IP rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+    return { success: false, message: "Password reset service temporarily unavailable. Please try again later." };
+  }
   const ipKey = `resetcomp:ip:${ipHash}`;
   let ipLimitResult: RateLimitResult;
   try {
@@ -499,7 +525,13 @@ export async function recordPasswordResetCompletionOperation(
     }
 
     // 4. Account-level rate limiting
-    const accountHash = hashAccountIdentifier(userEmail || userId);
+    let accountHash: string;
+    try {
+      accountHash = hashAccountIdentifier(userEmail || userId);
+    } catch (err) {
+      console.error("[recordPasswordResetCompletionOperation] Account rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+      return { success: false, message: "Password reset service temporarily unavailable. Please try again later." };
+    }
     const accountKey = `resetcomp:act:${accountHash}`;
     let accountLimitResult: RateLimitResult;
     try {
@@ -894,7 +926,16 @@ export async function changeAdminPasswordOperation(
   const userEmail = context.profile.email || context.user.email || "unknown@cobralearn.internal";
 
   // 2. Dual-tier rate limiting: IP level
-  const ipHash = hashIpIdentifier(clientIp);
+  let ipHash: string;
+  try {
+    ipHash = hashIpIdentifier(clientIp);
+  } catch (err) {
+    console.error("[changeAdminPasswordOperation] IP rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+    return {
+      success: false,
+      message: "Password change service temporarily unavailable. Please try again later.",
+    };
+  }
   const ipKey = `pwchange:ip:${ipHash}`;
   let ipLimitResult: RateLimitResult;
   try {
@@ -938,7 +979,16 @@ export async function changeAdminPasswordOperation(
   }
 
   // 2b. Dual-tier rate limiting: Account level
-  const accountHash = hashAccountIdentifier(userEmail || userId);
+  let accountHash: string;
+  try {
+    accountHash = hashAccountIdentifier(userEmail || userId);
+  } catch (err) {
+    console.error("[changeAdminPasswordOperation] Account rate limit identifier derivation failure (failing closed):", err instanceof Error ? err.message : String(err));
+    return {
+      success: false,
+      message: "Password change service temporarily unavailable. Please try again later.",
+    };
+  }
   const accountKey = `pwchange:act:${accountHash}`;
   let accountLimitResult: RateLimitResult;
   try {
